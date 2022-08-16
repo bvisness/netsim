@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import "core:runtime"
+import "core:strings"
 
 global_arena_data := [1024]byte{}
 global_arena := Arena{}
@@ -37,11 +38,61 @@ conns : [dynamic]Connection
 
 
 t: f32 = 0
-max_width : f32 = 0
-max_height : f32 = 0
-pad_size : f32 = 20
-node_size : f32 = 50
+max_width   : f32 = 0
+max_height  : f32 = 0
+pad_size    : f32 = 30
+node_size   : f32 = 50
 packet_size : f32 = 30
+
+ip_to_str :: proc(ip: u32, ip_store: []u8) -> string {
+	b := strings.builder_from_bytes(ip_store[:])
+
+	ip_bytes := transmute([4]u8)ip
+	fmt.sbprintf(&b, "%v.%v.%v.%v", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3])
+
+	return strings.to_string(b)
+}
+
+str_to_ip :: proc(ip: string) -> (u32, bool) {
+
+	// ip must contain at least 7 chars; ex: `0.0.0.0`
+	if len(ip) < 7 {
+		return 0, false
+	}
+
+	bytes := [4]u8{}
+	chunk_idx := 0
+	for i := 0; i < len(ip); {
+
+		chunk_len := 0
+		chunk : u64 = 0
+		chunk_loop: for ; i < len(ip); {
+			switch ip[i] {
+			case '0'..='9':
+				chunk = chunk * 10 + u64(ip[i] - '0')
+
+				i += 1
+				chunk_len += 1
+			case '.':
+				i += 1
+				break chunk_loop
+			case:
+				return 0, false
+			}
+		}
+
+		// max of 3 digits per chunk, with each section, 255 or less
+		if chunk > 255 || chunk_len > 3{
+			return 0, false
+		}	
+		
+		bytes[chunk_idx] = u8(chunk)
+		chunk_idx += 1
+	}
+
+	ip := transmute(u32)bytes
+	return ip, true
+}
 
 main :: proc() {
     fmt.println("Hellope!")
@@ -55,10 +106,37 @@ main :: proc() {
     context = wasmContext
 
 	nodes = make([dynamic]Node, 0)
-	append(&nodes, Node{pos = {0,   400}})
-	append(&nodes, Node{pos = {400, 400}})
-	append(&nodes, Node{pos = {800, 0}})
-	append(&nodes, Node{pos = {800, 800}})
+	conns = make([dynamic]Connection, 0)
+
+	// This is gross.. Replace this when possible
+	ip_strs := [4]string{"192.168.1.1", "10.0.0.1", "172.168.1.1", "172.168.1.2"}
+	ips := [4]u32{}
+
+	for i := 0; i < len(ip_strs); i += 1 {
+		ip, ok := str_to_ip(ip_strs[i])
+		if !ok {
+			fmt.println("Failed to parse IP!")
+		}
+
+		ips[i] = ip
+	}
+
+	append(&nodes, Node{
+		pos = {0, 400},
+		ip = ips[0],
+	})
+	append(&nodes, Node{
+		pos = {400, 400},
+		ip = ips[1],
+	})
+	append(&nodes, Node{
+		pos = {800, 0},
+		ip = ips[2],
+	})
+	append(&nodes, Node{
+		pos = {800, 800},
+		ip = ips[3],
+	})
 
 	for i := 0; i < len(nodes); i += 1 {
 		node := &nodes[i]
@@ -76,7 +154,6 @@ main :: proc() {
 	max_width += node_size
 	max_height += node_size
 
-	conns = make([dynamic]Connection, 0)
 	append(&conns, Connection{src_id = 0, dst_id = 1})
 	append(&conns, Connection{src_id = 1, dst_id = 2})
 	append(&conns, Connection{src_id = 1, dst_id = 3})
@@ -118,6 +195,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// render nodes
 	for i := 0; i < len(nodes); i += 1 {
     	canvas_rect(nodes[i].pos.x, nodes[i].pos.y, node_size, node_size, 5, 0, 0, 0, 255)
+
+		ip_store := [16]u8{}
+		ip_str := ip_to_str(nodes[i].ip, ip_store[:])
+		canvas_text(ip_str, nodes[i].pos.x, nodes[i].pos.y + node_size + 10, 0, 0, 0, 255)
 	}
 
     return true
