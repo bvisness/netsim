@@ -31,7 +31,7 @@ frame :: proc "contextless" (width, height: int, dt: f32) -> bool {
     t += dt
 
     canvas_clear()
-    canvas_rect(100, 100, width - 200, 50 + int(math.sin_f32(t)*20), 5, 0, 0, 0, 255)
+    canvas_rect(100, 100, f32(width - 200), 50 + math.sin_f32(t)*20, 5, 0, 0, 0, 255)
     return true
 }
 
@@ -45,11 +45,11 @@ foreign import "js"
 
 foreign js {
     canvas_clear :: proc() ---
-    canvas_clip :: proc(x, y, w, h: int) ---
-    canvas_rect :: proc(x, y, w, h, r, red, green, blue, alpha: int) ---
-    canvas_text :: proc(str: string, x, y, r, g, b, a: int) ---
-    canvas_line :: proc(x1, y1, x2, y2, r, g, b, a: int, strokeWidth: f32) ---
-    canvas_arc :: proc(x, y, radius: int, angleStart, angleEnd: f32, r, g, b, a: int, strokeWidth: f32) ---
+    canvas_clip :: proc(x, y, w, h: f32) ---
+    canvas_rect :: proc(x, y, w, h, radius: f32, r, g, b, a: int) ---
+    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: int) ---
+    canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: int, strokeWidth: f32) ---
+    canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: int, strokeWidth: f32) ---
     measure_text :: proc(str: string) -> int ---
 
     debugger :: proc() ---
