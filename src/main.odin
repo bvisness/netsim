@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 import "core:mem"
 import "core:runtime"
 
@@ -22,8 +23,17 @@ main :: proc() {
     wasmContext.temp_allocator = arena_allocator(&temp_arena)
 }
 
+t: f32 = 0
+
 @export
-frame :: proc "contextless" () {}
+frame :: proc "contextless" (width, height: int, dt: f32) -> bool {
+    context = wasmContext
+    t += dt
+
+    canvas_clear()
+    canvas_rect(100, 100, width - 200, 50 + int(math.sin_f32(t)*20), 5, 0, 0, 0, 255)
+    return true
+}
 
 @export
 temp_allocate :: proc(n: int) -> rawptr {
