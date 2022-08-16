@@ -26,12 +26,19 @@ main :: proc() {
 t: f32 = 0
 
 @export
-frame :: proc "contextless" (width, height: int, dt: f32) -> bool {
+frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
     t += dt
 
     canvas_clear()
-    canvas_rect(100, 100, f32(width - 200), 50 + math.sin_f32(t)*20, 5, 0, 0, 0, 255)
+
+    rectHeight := 50 + math.sin_f32(t)*20
+    canvas_rect(100, 100, width - 200, rectHeight, 5, 0, 0, 0, 255)
+
+    str := "Hello, cloin!"
+    textX := width/2 - measure_text(str)/2
+    canvas_text(str, textX, 100 + rectHeight + 10, 0, 0, 0, 255)
+
     return true
 }
 
@@ -50,7 +57,7 @@ foreign js {
     canvas_text :: proc(str: string, x, y: f32, r, g, b, a: int) ---
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: int, strokeWidth: f32) ---
     canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: int, strokeWidth: f32) ---
-    measure_text :: proc(str: string) -> int ---
+    measure_text :: proc(str: string) -> f32 ---
 
     debugger :: proc() ---
     logString :: proc(str: string) ---
