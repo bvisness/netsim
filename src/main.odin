@@ -13,6 +13,14 @@ temp_arena := Arena{}
 
 wasmContext := runtime.default_context()
 
+Node :: struct {
+	pos: [2]f32,
+}
+
+Packet :: struct {
+	pos: [2]f32,
+}
+
 main :: proc() {
     fmt.println("Hellope!")
 
@@ -32,12 +40,25 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     canvas_clear()
 
-    rectHeight := 50 + math.sin_f32(t)*20
-    canvas_rect(100, 100, width - 200, rectHeight, 5, 0, 0, 0, 255)
+	me := Node{pos = {50, 50}}
+	them := Node{pos = {400, 50}}
 
-    str := "Hello, cloin!"
-    textX := width/2 - measure_text(str)/2
-    canvas_text(str, textX, 100 + rectHeight + 10, 0, 0, 0, 255)
+	pkt := Packet{pos = me.pos}
+
+	node_size : f32 = 50
+	packet_size : f32 = node_size / 2
+
+    canvas_rect(me.pos.x, me.pos.y, node_size, node_size, 5, 0, 0, 0, 255)
+    canvas_rect(them.pos.x, them.pos.y, node_size, node_size, 5, 0, 0, 0, 255)
+	canvas_line(me.pos.x + node_size, me.pos.y + (node_size / 2), them.pos.x, them.pos.y + (node_size / 2), 0, 0, 0, 255, 3)
+
+	
+	me_center := [2]f32{me.pos.x + node_size, me.pos.y + (packet_size / 2)}
+	them_center := [2]f32{them.pos.x - packet_size, them.pos.y + (packet_size / 2)}
+
+	perc := ((-math.cos_f32(t) + 1) / 2)
+	lerped := ((1 - perc) * me_center) + (perc * them_center)
+	canvas_rect(lerped.x, lerped.y, packet_size, packet_size, 5, 100, 100, 100, 255)
 
     return true
 }
