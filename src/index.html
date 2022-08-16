@@ -41,6 +41,14 @@
 	</div>
 
 	<script>
+		function str(s) {
+			const bytes = new TextEncoder("utf-8").encode(s);
+			const len = bytes.length;
+			const p = window.wasm.temp_allocate(len);
+			window.wasm.odinMem.loadBytes(p, len).set(bytes);
+			return [p, len];
+		}
+
 		function dumpMem8(mem) {
 			console.log(new Uint8Array(mem.buffer));
 		}
@@ -75,14 +83,6 @@
 
 		let dpr;
 		let textHeight;
-
-		function putString(str) {
-			const bytes = new TextDecoder("utf-8").encode(str);
-			const len = bytes.length;
-			const p = window.wasm.tempAllocate(len);
-			this.loadBytes(p, len).set(bytes);
-			return [p, len];
-		}
 
 		async function init() {
 			window.wasm = await odin.runWasm('netsim.wasm', null, {
