@@ -15,22 +15,33 @@ wasmContext := runtime.default_context()
 
 Node :: struct {
 	pos: [2]f32,
+
+	ip: u32,
 	iptable: [10]u32,
 }
 
 Connection :: struct {
-	src: int,
-	dst: int,
+	src_id: int,
+	dst_id: int,
 }
 
 Packet :: struct {
 	pos: [2]f32,
-	src: u32,
-	dst: u32,
+
+	src_ip: u32,
+	dst_ip: u32,
 }
 
 nodes : [dynamic]Node
 conns : [dynamic]Connection
+
+
+t: f32 = 0
+max_width : f32 = 0
+max_height : f32 = 0
+pad_size : f32 = 20
+node_size : f32 = 50
+packet_size : f32 = 30
 
 main :: proc() {
     fmt.println("Hellope!")
@@ -44,20 +55,32 @@ main :: proc() {
     context = wasmContext
 
 	nodes = make([dynamic]Node, 0)
-	append(&nodes, Node{pos = {50, 50}})
-	append(&nodes, Node{pos = {400, 50}})
+	append(&nodes, Node{pos = {0,   400}})
 	append(&nodes, Node{pos = {400, 400}})
-	append(&nodes, Node{pos = {800, 50}})
+	append(&nodes, Node{pos = {800, 0}})
+	append(&nodes, Node{pos = {800, 800}})
+
+	for i := 0; i < len(nodes); i += 1 {
+		node := &nodes[i]
+		node.pos.x += (pad_size * 2)
+		node.pos.y += (pad_size * 2)
+
+		if node.pos.x > max_width {
+			max_width = node.pos.x
+		}
+
+		if node.pos.y > max_height {
+			max_height = node.pos.y
+		}
+	}
+	max_width += node_size
+	max_height += node_size
 
 	conns = make([dynamic]Connection, 0)
-	append(&conns, Connection{src = 0, dst = 1})
-	append(&conns, Connection{src = 1, dst = 2})
-	append(&conns, Connection{src = 1, dst = 3})
+	append(&conns, Connection{src_id = 0, dst_id = 1})
+	append(&conns, Connection{src_id = 1, dst_id = 2})
+	append(&conns, Connection{src_id = 1, dst_id = 3})
 }
-
-t: f32 = 0
-node_size : f32 = 50
-packet_size : f32 = 30
 
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
@@ -66,15 +89,20 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     canvas_clear()
 
+	// render padded background
+	canvas_rect(pad_size, pad_size, max_width, max_height, 0, 220, 220, 220, 255)
+
+	// render lines
 	for i := 0; i < len(conns); i += 1 {
-		node_a := nodes[conns[i].src]
-		node_b := nodes[conns[i].dst]
+		node_a := nodes[conns[i].src_id]
+		node_b := nodes[conns[i].dst_id]
 		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), 0, 0, 0, 255, 3)
 	}
 
+	// render packets
 	for i := 0; i < len(conns); i += 1 {
-		node_a := nodes[conns[i].src]
-		node_b := nodes[conns[i].dst]
+		node_a := nodes[conns[i].src_id]
+		node_b := nodes[conns[i].dst_id]
 
 		pkt := Packet{pos = node_a.pos}
 		a_center := [2]f32{node_a.pos.x + ((node_size / 2) - (packet_size / 2)), node_a.pos.y + ((node_size / 2) - (packet_size / 2))}
@@ -87,6 +115,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		canvas_rect(lerped.x, lerped.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
 	}
 
+	// render nodes
 	for i := 0; i < len(nodes); i += 1 {
     	canvas_rect(nodes[i].pos.x, nodes[i].pos.y, node_size, node_size, 5, 0, 0, 0, 255)
 	}
