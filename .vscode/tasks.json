@@ -19,7 +19,7 @@
                 "isDefault": true
             },
             "type": "shell",
-            "command": "python",
+            "command": "python3",
             "args": [
                 "build.py"
             ],
@@ -47,7 +47,7 @@
             "command": "python",
             "args": [
                 "-m",
-                "http.server"
+                "http.server", "8000"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/build/dist"
