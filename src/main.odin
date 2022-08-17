@@ -4,6 +4,7 @@ import "core:container/queue"
 import "core:fmt"
 import "core:intrinsics"
 import "core:math"
+import "core:math/rand"
 import "core:mem"
 import "core:runtime"
 import "core:strings"
@@ -188,11 +189,6 @@ main :: proc() {
 		}
 	})
 
-	queue.push_back(&me.buffer, Packet{
-		src_ip = me.interfaces[0].ip,
-		dst_ip = discord_3.interfaces[0].ip,
-	})
-
 	append(&nodes,
 		me,
 		comcast,
@@ -282,7 +278,7 @@ tick :: proc() {
 			}
 		}
 		if is_for_me {
-			fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
+			// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
 			continue
 		}
 
@@ -295,16 +291,16 @@ tick :: proc() {
 						packet = packet,
 						node = dst_node,
 					})
-					fmt.printf("Node %d: here have packet!!\n", node_id)
+					// fmt.printf("Node %d: here have packet!!\n", node_id)
 				} else {
-					fmt.printf("Node %d: bad routing rule! discarding packet.\n", node_id)
+					// fmt.printf("Node %d: bad routing rule! discarding packet.\n", node_id)
 				}
 				continue nextnode
 			}
 		}
 
 		// the hell is this packet
-		fmt.printf("Node %d: the hell is this packet? discarding\n", node_id)
+		// fmt.printf("Node %d: the hell is this packet? discarding\n", node_id)
 	}
 
 	for send in packet_sends {
@@ -333,6 +329,10 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 	return nil, false
 }
 
+tick_count := 0
+last_tick_t := t
+TICK_INTERVAL_S :: 0.3
+
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
@@ -340,7 +340,19 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     t += dt
 
-	tick()
+	if t - last_tick_t >= TICK_INTERVAL_S {
+		defer last_tick_t = t
+		defer tick_count += 1
+		
+		tick()
+
+		if tick_count % 3 == 0 {
+			queue.push_back(&nodes[0].buffer, Packet{
+				src_ip = nodes[0].interfaces[0].ip,
+				dst_ip = nodes[rand.int31() % 3 + 5].interfaces[0].ip,
+			})
+		}
+	}
 
     canvas_clear()
 
@@ -355,28 +367,21 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// render nodes
-	for i := 0; i < len(nodes); i += 1 {
-    	canvas_rect(nodes[i].pos.x, nodes[i].pos.y, node_size, node_size, 5, 0, 0, 0, 255)
+	for node in nodes {
+    	canvas_rect(node.pos.x, node.pos.y, node_size, node_size, 5, 0, 0, 0, 255)
 
 		ip_store := [16]u8{}
-		ip_str := ip_to_str(nodes[i].interfaces[0].ip, ip_store[:])
-		canvas_text(ip_str, nodes[i].pos.x, nodes[i].pos.y + node_size + 10, 0, 0, 0, 255)
-	}
+		ip_str := ip_to_str(node.interfaces[0].ip, ip_store[:])
+		canvas_text(ip_str, node.pos.x, node.pos.y + node_size + 10, 0, 0, 0, 255)
 
-	// render packets
-	for i := 0; i < len(conns); i += 1 {
-		node_a := nodes[conns[i].src_id.node_id]
-		node_b := nodes[conns[i].dst_id.node_id]
+		canvas_text(fmt.tprintf("%d", queue.len(node.buffer)), node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
 
-		pkt := Packet{pos = node_a.pos}
-		a_center := [2]f32{node_a.pos.x + ((node_size / 2) - (packet_size / 2)), node_a.pos.y + ((node_size / 2) - (packet_size / 2))}
-		b_center := [2]f32{node_b.pos.x + ((node_size / 2) - (packet_size / 2)), node_b.pos.y + ((node_size / 2) - (packet_size / 2))}
+		if queue.len(node.buffer) > 0 {
+			pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
+			color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
 
-		perc: f32 = 0 // TODO
-		lerped := ((1 - perc) * a_center) + (perc * b_center)
-		color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
-
-		canvas_rect(lerped.x, lerped.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
+			canvas_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
+		}
 	}
 
     return true
