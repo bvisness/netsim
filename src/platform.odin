@@ -1,5 +1,7 @@
 package main
 
+import "core:mem"
+
 @export
 mouse_move :: proc "contextless" (x, y: int) {}
 
