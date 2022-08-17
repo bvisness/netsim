@@ -4,7 +4,7 @@ import "core:container/queue"
 import "core:math"
 
 node_size: f32 : 50
-packet_size: f32 : 30
+packet_size: f32 : 8
 packet_size_in_buffer: f32 : 4
 packets_per_row: int : 5
 
@@ -16,7 +16,15 @@ pos_in_buffer :: proc(n: ^Node, i: int) -> Vec2 {
     row := i / packets_per_row
     col := i % packets_per_row
 
-    return rect.pos + Vec2{packet_size_in_buffer, packet_size_in_buffer} + Vec2{f32(col) * buffer_spacing, f32(row) * buffer_spacing}
+    offset := Vec2{-1, packet_size_in_buffer + f32(row) * buffer_spacing}
+    col_offset := packet_size_in_buffer + f32(col) * buffer_spacing
+    if row % 2 == 0 {
+        offset.x = col_offset
+    } else {
+        offset.x = rect.size.x - col_offset
+    }
+
+    return rect.pos + offset
 }
 
 buffer_rect :: proc(n: ^Node) -> Rect {
@@ -30,6 +38,16 @@ buffer_rect :: proc(n: ^Node) -> Rect {
     return Rect{
         pos = pos,
         size = Vec2{node_size, height}
+    }
+}
+
+ease_linear :: proc(t, start, end: f32) -> f32 {
+    if t <= start {
+        return 0
+    } else if t >= end {
+        return 1
+    } else {
+        return (t-start) / (end-start)
     }
 }
 

@@ -18,6 +18,7 @@ temp_arena := Arena{}
 wasmContext := runtime.default_context()
 
 Vec2 :: [2]f32
+Vec3 :: [3]f32
 Rect :: struct {
 	pos: Vec2,
 	size: Vec2,
@@ -59,12 +60,12 @@ ConnectionID :: struct {
 }
 
 Packet :: struct {
-	pos: Vec2,
-
 	src_ip: u32,
 	dst_ip: u32,
 
-	// Properties for animation
+	// Properties for visualization
+	pos: Vec2,
+	color: Vec3,
 	anim: PacketAnimation,
 	// NOTE(ben): If / when we add node deletion, this could get into use-after-free territory.
 	// Maybe avoid it by not allowing editing while simulating...
@@ -94,11 +95,11 @@ max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 40
 buffer_size : int = 10
-TICK_INTERVAL_S :: 1
-TICK_ANIM_DURATION_S :: 0.6
-NEW_ANIM_DURATION_S :: 0.4
-DONE_ANIM_DURATION_S :: 0.6
-DROPPED_ANIM_DURATION_S :: 0.8
+TICK_INTERVAL_S :: 0.8
+TICK_ANIM_DURATION_S :: 0.4
+NEW_ANIM_DURATION_S :: 0.3
+DONE_ANIM_DURATION_S :: 0.7
+DROPPED_ANIM_DURATION_S :: 0.6
 
 main :: proc() {
     arena_init(&global_arena, global_arena_data[:])
@@ -290,6 +291,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					dst_ip = nodes[dst_id].interfaces[0].ip,
 
 					// visualization
+					color = Vec3{f32(rand_int(100, 200)), f32(rand_int(100, 200)), f32(rand_int(100, 200))},
 					src_node = &nodes[src_id],
 					dst_node = &nodes[src_id], // not a mistake!
 					src_bufid = queue.len(nodes[src_id].buffer),
@@ -329,12 +331,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		canvas_text(node.name, node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
 
 		// Draw ???
-		if queue.len(node.buffer) > 0 {
-			pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
-			color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
+		// if queue.len(node.buffer) > 0 {
+		// 	pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
+		// 	color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
 
-			canvas_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
-		}
+		// 	canvas_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
+		// }
 
 		// Draw node packets
 		for i := 0; i < queue.len(node.buffer); i += 1 {
@@ -351,7 +353,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
 			}
 
-			canvas_circle(pos.x, pos.y, size, 100, 100, 100, 255)
+			canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
 			packet.pos = pos
 		}
 	}
@@ -362,13 +364,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		case .Delivered:
 			anim_t := clamp(0, 1, (t - last_tick_t) / DONE_ANIM_DURATION_S)
 			pos := math.lerp(packet.pos, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_back(anim_t))
-			size := math.lerp(packet_size_in_buffer, 0, ease_in(anim_t))
-			canvas_circle(pos.x, pos.y, size, 100, 100, 100, 255)
+			size := math.lerp(packet_size_in_buffer, packet_size, ease_in(anim_t))
+			alpha := math.lerp(f32(255), f32(0), ease_linear(anim_t, 0.9, 1))
+			canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, alpha)
 		case .Dropped:
 			anim_t := clamp(0, 1, (t - last_tick_t) / DROPPED_ANIM_DURATION_S)
 			pos := math.lerp(packet.pos, packet.pos + Vec2{0, 25}, ease_in(anim_t))
-			alpha := int(math.lerp(f32(255), f32(0), anim_t))
-			canvas_circle(pos.x, pos.y, packet_size_in_buffer, 100, 100, 100, alpha)
+			alpha := math.lerp(f32(255), f32(0), anim_t)
+			canvas_circle(pos.x, pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
 		}
 	}
 

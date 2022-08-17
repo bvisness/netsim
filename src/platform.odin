@@ -37,11 +37,11 @@ foreign import "js"
 foreign js {
     canvas_clear :: proc() ---
     canvas_clip :: proc(x, y, w, h: f32) ---
-    canvas_rect :: proc(x, y, w, h, radius: f32, r, g, b, a: int) ---
-    canvas_circle :: proc(x, y, radius: f32, r, g, b, a: int) ---
-    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: int) ---
-    canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: int, strokeWidth: f32) ---
-    canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: int, strokeWidth: f32) ---
+    canvas_rect :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
+    canvas_circle :: proc(x, y, radius: f32, r, g, b, a: f32) ---
+    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32) ---
+    canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
+    canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     measure_text :: proc(str: string) -> f32 ---
 
     debugger :: proc() ---
