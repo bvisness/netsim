@@ -68,73 +68,15 @@ pad_size    : f32 = 30
 node_size   : f32 = 50
 packet_size : f32 = 30
 
-ip_to_str :: proc(ip: u32, ip_store: []u8) -> string {
-	b := strings.builder_from_bytes(ip_store[:])
-
-	ip_bytes := transmute([4]u8)ip
-	fmt.sbprintf(&b, "%v.%v.%v.%v", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3])
-
-	return strings.to_string(b)
-}
-
-str_to_ip :: proc(ip: string) -> (u32, bool) {
-
-	// ip must contain at least 7 chars; ex: `0.0.0.0`
-	if len(ip) < 7 {
-		return 0, false
-	}
-
-	bytes := [4]u8{}
-	chunk_idx := 0
-	for i := 0; i < len(ip); {
-
-		chunk_len := 0
-		chunk : u64 = 0
-		chunk_loop: for ; i < len(ip); {
-			switch ip[i] {
-			case '0'..='9':
-				chunk = chunk * 10 + u64(ip[i] - '0')
-
-				i += 1
-				chunk_len += 1
-			case '.':
-				i += 1
-				break chunk_loop
-			case:
-				return 0, false
-			}
-		}
-
-		// max of 3 digits per chunk, with each section, 255 or less
-		if chunk > 255 || chunk_len > 3{
-			return 0, false
-		}	
-		
-		bytes[chunk_idx] = u8(chunk)
-		chunk_idx += 1
-	}
-
-	ip := transmute(u32)bytes
-	return ip, true
-}
-
-must_str_to_ip :: proc(ip: string) -> u32 {
-	ipNum, ok := str_to_ip(ip)
-	if !ok {
-		intrinsics.trap()
-	}
-	return ipNum
-}
-
-make_node :: proc(pos: Vec2, ip: string) -> Node {
+make_node :: proc(pos: Vec2, ips: []string, routing_rules: []RoutingRule) -> Node {
 	n := Node{pos = pos}
-	n.interfaces[0] = Interface{
-		ip = must_str_to_ip(ip),
+	for ip, i in ips { 
+		n.interfaces[i] = Interface{
+			ip = must_str_to_ip(ip),
+		}
 	}
-	n.routing_rules[0] = RoutingRule{
-		ip = must_str_to_ip("192.168.1.0"),
-		subnet_mask = must_str_to_ip("255.255.255.0"),
-		interface_id = 0,
+	for rule, i in routing_rules {
+		n.routing_rules[i] = rule
 	}
 	// TODO: set up buffer slice or whatever
 	return n
@@ -154,11 +96,101 @@ main :: proc() {
 	nodes = make([dynamic]Node, 0)
 	conns = make([dynamic]Connection, 0)
 
+	me := make_node(Vec2{0, 400}, []string{"2.2.2.123"}, []RoutingRule{
+		{
+			ip = must_str_to_ip("0.0.0.0"), subnet_mask = must_str_to_ip("0.0.0.0"),
+			interface_id = 0,
+		},
+	})
+	comcast := make_node(Vec2{200, 400}, []string{"2.2.2.1", "2.2.2.2", "2.2.2.3"}, []RoutingRule{
+		{ // Me
+			ip = must_str_to_ip("2.2.2.123"), subnet_mask = must_str_to_ip("255.255.255.255"),
+			interface_id = 0,
+		},
+		{ // Google
+			ip = must_str_to_ip("3.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 1,
+		},
+		{ // Cloudflare
+			ip = must_str_to_ip("4.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 2,
+		},
+		{ // Discord
+			ip = must_str_to_ip("5.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 2,
+		},
+	})
+	google := make_node(Vec2{400, 200}, []string{"3.3.3.1", "3.3.3.2"}, []RoutingRule{
+		{ // Comcast
+			ip = must_str_to_ip("2.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 0,
+		},
+		{ // Cloudflare
+			ip = must_str_to_ip("4.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 1,
+		},
+		{ // Discord
+			ip = must_str_to_ip("5.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 1,
+		},
+	})
+	cloudflare := make_node(Vec2{400, 600}, []string{"4.4.4.1", "4.4.4.2", "4.4.4.3"}, []RoutingRule{
+		{ // Comcast
+			ip = must_str_to_ip("2.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 0,
+		},
+		{ // Google
+			ip = must_str_to_ip("3.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 1,
+		},
+		{ // Discord
+			ip = must_str_to_ip("5.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 2,
+		},
+	})
+	discord_hub := make_node(Vec2{600, 600}, []string{"5.5.5.1", "5.5.5.2", "5.5.5.2", "5.5.5.2"}, []RoutingRule{
+		{ // Cloudflare
+			ip = must_str_to_ip("4.0.0.0"), subnet_mask = must_str_to_ip("255.0.0.0"),
+			interface_id = 0,
+		},
+		{ // Discord 1
+			ip = must_str_to_ip("5.5.100.1"), subnet_mask = must_str_to_ip("255.255.255.255"),
+			interface_id = 1,
+		},
+		{ // Discord 2
+			ip = must_str_to_ip("5.5.100.2"), subnet_mask = must_str_to_ip("255.255.255.255"),
+			interface_id = 2,
+		},
+		{ // Discord 3
+			ip = must_str_to_ip("5.5.100.3"), subnet_mask = must_str_to_ip("255.255.255.255"),
+			interface_id = 3,
+		},
+	})
+	discord_1 := make_node(Vec2{700, 500}, []string{"5.5.100.1"}, []RoutingRule{
+		{
+			ip = must_str_to_ip("0.0.0.0"), subnet_mask = must_str_to_ip("0.0.0.0"),
+			interface_id = 0,
+		}
+	})
+	discord_2 := make_node(Vec2{700, 600}, []string{"5.5.100.2"}, []RoutingRule{
+		{
+			ip = must_str_to_ip("0.0.0.0"), subnet_mask = must_str_to_ip("0.0.0.0"),
+			interface_id = 0,
+		}
+	})
+	discord_3 := make_node(Vec2{700, 700}, []string{"5.5.100.3"}, []RoutingRule{
+		{
+			ip = must_str_to_ip("0.0.0.0"), subnet_mask = must_str_to_ip("0.0.0.0"),
+			interface_id = 0,
+		}
+	})
+
 	append(&nodes,
-		make_node(Vec2{0, 400}, "192.168.1.1"),
-		make_node(Vec2{400, 400}, "10.0.0.1"),
-		make_node(Vec2{800, 0}, "172.168.1.1"),
-		make_node(Vec2{800, 800}, "172.168.1.2"),
+		me,
+		comcast,
+		google,
+		cloudflare,
+		discord_hub, discord_1, discord_2, discord_3,
 	)
 
 	for i := 0; i < len(nodes); i += 1 {
@@ -177,18 +209,40 @@ main :: proc() {
 	max_width += node_size
 	max_height += node_size
 
-	append(&conns, Connection{
-		src_id = ConnectionID{node_id = 0},
-		dst_id = ConnectionID{node_id = 1},
-	})
-	append(&conns, Connection{
-		src_id = ConnectionID{node_id = 1},
-		dst_id = ConnectionID{node_id = 2},
-	})
-	append(&conns, Connection{
-		src_id = ConnectionID{node_id = 1},
-		dst_id = ConnectionID{node_id = 3},
-	})
+	append(&conns,
+		Connection{ // me <-> comcast
+			src_id = ConnectionID{node_id = 0},
+			dst_id = ConnectionID{node_id = 1},
+		},
+		Connection{ // comcast <-> google
+			src_id = ConnectionID{node_id = 1, interface_id = 1},
+			dst_id = ConnectionID{node_id = 2},
+		},
+		Connection{ // comcast <-> cloudflare
+			src_id = ConnectionID{node_id = 1, interface_id = 2},
+			dst_id = ConnectionID{node_id = 3},
+		},
+		Connection{ // google <-> cloudflare
+			src_id = ConnectionID{node_id = 2, interface_id = 1},
+			dst_id = ConnectionID{node_id = 3, interface_id = 1},
+		},
+		Connection{ // cloudflare <-> discord hub
+			src_id = ConnectionID{node_id = 3, interface_id = 2},
+			dst_id = ConnectionID{node_id = 4},
+		},
+		Connection{ // discord hub <-> discord 1
+			src_id = ConnectionID{node_id = 4, interface_id = 1},
+			dst_id = ConnectionID{node_id = 5},
+		},
+		Connection{ // discord hub <-> discord 2
+			src_id = ConnectionID{node_id = 4, interface_id = 2},
+			dst_id = ConnectionID{node_id = 6},
+		},
+		Connection{ // discord hub <-> discord 3
+			src_id = ConnectionID{node_id = 4, interface_id = 3},
+			dst_id = ConnectionID{node_id = 7},
+		},
+	)
 }
 
 @export
