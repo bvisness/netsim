@@ -23,8 +23,9 @@ Vec2 :: distinct [2]f32
 Node :: struct {
 	pos: Vec2,
 
-	interfaces: [4]Interface,
-	routing_rules: [10]RoutingRule,
+	name: string,
+	interfaces: []Interface,
+	routing_rules: []RoutingRule,
 
 	buffer: queue.Queue(Packet),
 }
@@ -73,12 +74,13 @@ pad_size    : f32 = 30
 node_size   : f32 = 50
 packet_size : f32 = 30
 buffer_size : int = 10
+TICK_INTERVAL_S :: 0.2
 
 net_config := `
 {
 	"nodes": [
 		{
-			"_name": "me",
+			"name": "me",
 			"pos": { "x": 0, "y": 400 },
 			"interfaces": [ "2.2.2.123" ],
 			"rules": [
@@ -86,7 +88,7 @@ net_config := `
 			]
 		},
 		{
-			"_name": "comcast",
+			"name": "comcast",
 			"pos": { "x": 200, "y": 400 },
 			"interfaces": [ "2.2.2.1", "2.2.2.2", "2.2.2.3" ],
 			"rules": [
@@ -97,7 +99,7 @@ net_config := `
 			]
 		},
 		{
-			"_name": "google",
+			"name": "google",
 			"pos": { "x": 400, "y": 200 },
 			"interfaces": [ "3.3.3.1", "3.3.3.2" ],
 			"rules": [
@@ -107,7 +109,7 @@ net_config := `
 			]
 		},
 		{
-			"_name": "cloudflare",
+			"name": "cloudflare",
 			"pos": { "x": 400, "y": 600 },
 			"interfaces": [ "4.4.4.1", "4.4.4.2", "4.4.4.3" ],
 			"rules": [
@@ -117,7 +119,7 @@ net_config := `
 			]
 		},
 		{
-			"_name": "discord_hub",
+			"name": "discord_hub",
 			"pos": { "x": 600, "y": 600 },
 			"interfaces": [ "5.5.5.1", "5.5.5.2", "5.5.5.2", "5.5.5.2" ],
 			"rules": [
@@ -128,24 +130,24 @@ net_config := `
 			]
 		},
 		{
-			"_name": "discord_1",
-			"pos": { "x": 700, "y": 500 },
+			"name": "discord_1",
+			"pos": { "x": 750, "y": 500 },
 			"interfaces": [ "5.5.100.1" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
 			]
 		},
 		{
-			"_name": "discord_2",
-			"pos": { "x": 700, "y": 600 },
+			"name": "discord_2",
+			"pos": { "x": 750, "y": 600 },
 			"interfaces": [ "5.5.100.2" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
 			]
 		},
 		{
-			"_name": "discord_3",
-			"pos": { "x": 700, "y": 700 },
+			"name": "discord_3",
+			"pos": { "x": 750, "y": 700 },
 			"interfaces": [ "5.5.100.3" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
@@ -154,42 +156,42 @@ net_config := `
 	],
 	"conns": [
 		{
-			"_name": "me_comcast",
+			"name": "me_comcast",
 			"src": { "node_id": 0, "interface_id": 0 },
 			"dst": { "node_id": 1, "interface_id": 0 }
 		},
 		{
-			"_name": "comcast_google",
+			"name": "comcast_google",
 			"src": { "node_id": 1, "interface_id": 1 },
 			"dst": { "node_id": 2, "interface_id": 0 }
 		},
 		{
-			"_name": "comcast_cloudflare",
+			"name": "comcast_cloudflare",
 			"src": { "node_id": 1, "interface_id": 2 },
 			"dst": { "node_id": 3, "interface_id": 0 }
 		},
 		{
-			"_name": "google_cloudflare",
+			"name": "google_cloudflare",
 			"src": { "node_id": 2, "interface_id": 1 },
 			"dst": { "node_id": 3, "interface_id": 1 }
 		},
 		{
-			"_name": "cloudflare_discord_hub",
+			"name": "cloudflare_discord_hub",
 			"src": { "node_id": 3, "interface_id": 2 },
 			"dst": { "node_id": 4, "interface_id": 0 }
 		},
 		{
-			"_name": "discord_hub_discord_1",
+			"name": "discord_hub_discord_1",
 			"src": { "node_id": 4, "interface_id": 1 },
 			"dst": { "node_id": 5, "interface_id": 0 }
 		},
 		{
-			"_name": "discord_hub_discord_2",
+			"name": "discord_hub_discord_2",
 			"src": { "node_id": 4, "interface_id": 2 },
 			"dst": { "node_id": 6, "interface_id": 0 }
 		},
 		{
-			"_name": "discord_hub_discord_3",
+			"name": "discord_hub_discord_3",
 			"src": { "node_id": 4, "interface_id": 3 },
 			"dst": { "node_id": 7, "interface_id": 0 }
 		}
@@ -197,14 +199,13 @@ net_config := `
 }
 `
 
-make_node :: proc(pos: Vec2, ips: []u32, routing_rules: []RoutingRule) -> Node {
+make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rules: []RoutingRule) -> Node {
 	n := Node{pos = pos}
-	for ip, i in ips { 
-		n.interfaces[i] = Interface{ ip = ip }
-	}
-	for rule, i in routing_rules {
-		n.routing_rules[i] = rule
-	}
+
+	n.name = name
+	n.interfaces = interfaces
+	n.routing_rules = routing_rules
+
 	if ok := queue.init(&n.buffer, buffer_size); !ok {
 		fmt.println("Successfully failed to init queue.")
 		intrinsics.trap()
@@ -224,18 +225,22 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 	nodes_obj := obj_map["nodes"].(json.Array) or_return
 	for v in nodes_obj {
 		obj := v.(json.Object) or_return
+
+		name := obj["name"].(string) or_return
+
 		pos_map := obj["pos"].(json.Object) or_return
 
 		x := pos_map["x"].(i64) or_return
 		y := pos_map["y"].(i64) or_return
 		pos := Vec2{f32(x), f32(y)}
 
-		interfaces := make([dynamic]u32)
+		interfaces := make([dynamic]Interface)
 		interfaces_arr := obj["interfaces"].(json.Array) or_return
 		for interface in interfaces_arr {
 			ip_str := interface.(string) or_return
 			ip := str_to_ip(ip_str) or_return
-			append(&interfaces, ip)
+
+			append(&interfaces, Interface{ip = ip})
 		}
 
 		rules := make([dynamic]RoutingRule)
@@ -243,21 +248,22 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 		for rule_obj in rules_arr {
 			rule := rule_obj.(json.Object) or_return
 
-			ip_str     := rule["ip"].(string) or_return
-			subnet_str := rule["subnet"].(string) or_return
-			interface  := rule["interface"].(i64) or_return
-
+			ip_str := rule["ip"].(string) or_return
 			ip := str_to_ip(ip_str) or_return
+
+			subnet_str := rule["subnet"].(string) or_return
 			subnet_mask := str_to_ip(subnet_str) or_return
+
+			interface := rule["interface"].(i64) or_return
+
 			append(&rules, RoutingRule{ip = ip, subnet_mask = subnet_mask, interface_id = int(interface)})
 		}
 
-		append(nodes, make_node(pos, interfaces[:], rules[:]))
+		append(nodes, make_node(pos, name, interfaces[:], rules[:]))
 	}
 
 	// parse connections
 	conns_obj := obj_map["conns"].(json.Array) or_return
-
 	for v in conns_obj {
 		obj := v.(json.Object) or_return
 
@@ -412,7 +418,6 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 
 tick_count := 0
 last_tick_t := t
-TICK_INTERVAL_S :: 0.3
 
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
@@ -450,21 +455,25 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	canvas_rect(pad_size, pad_size, max_width, max_height, 0, 220, 220, 220, 255)
 
 	// render lines
-	for i := 0; i < len(conns); i += 1 {
-		node_a := nodes[conns[i].src_id.node_id]
-		node_b := nodes[conns[i].dst_id.node_id]
-		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), 0, 0, 0, 255, 3)
+	for conn in conns {
+		node_a := nodes[conn.src_id.node_id]
+		node_b := nodes[conn.dst_id.node_id]
+		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), 180, 180, 180, 255, 3)
 	}
 
 	// render nodes
 	for node in nodes {
     	canvas_rect(node.pos.x, node.pos.y, node_size, node_size, 5, 0, 0, 0, 255)
 
-		ip_store := [16]u8{}
-		ip_str := ip_to_str(node.interfaces[0].ip, ip_store[:])
-		canvas_text(ip_str, node.pos.x, node.pos.y + node_size + 10, 0, 0, 0, 255)
+		ip_pad : f32 = 5 
+		ip_offset : f32 = 16
+		for interface, i in node.interfaces {
+			ip_store := [16]u8{}
+			ip_str := ip_to_str(interface.ip, ip_store[:])
+			canvas_text(ip_str, node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
+		}
 
-		canvas_text(fmt.tprintf("%d", queue.len(node.buffer)), node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
+		canvas_text(fmt.tprintf("%s %d", node.name, queue.len(node.buffer)), node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
 
 		if queue.len(node.buffer) > 0 {
 			pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
