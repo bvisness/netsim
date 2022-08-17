@@ -63,6 +63,8 @@ nodes : [dynamic]Node
 conns : [dynamic]Connection
 
 t: f32 = 0
+min_width   : f32 = 10000
+min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 30
@@ -197,10 +199,23 @@ main :: proc() {
 		discord_hub, discord_1, discord_2, discord_3,
 	)
 
+	// nasty padding adjustments ahoy
 	for i := 0; i < len(nodes); i += 1 {
 		node := &nodes[i]
-		node.pos.x += (pad_size * 2)
-		node.pos.y += (pad_size * 2)
+
+		if node.pos.x < min_width {
+			min_width = node.pos.x
+		}
+
+		if node.pos.y < min_height {
+			min_height = node.pos.y
+		}
+	}
+	for i := 0; i < len(nodes); i += 1 {
+		node := &nodes[i]
+
+		node.pos.x = (node.pos.x - min_width) + (pad_size * 2)
+		node.pos.y = (node.pos.y - min_height) + (pad_size * 2)
 
 		if node.pos.x > max_width {
 			max_width = node.pos.x
@@ -212,6 +227,7 @@ main :: proc() {
 	}
 	max_width += node_size
 	max_height += node_size
+
 
 	append(&conns,
 		Connection{ // me <-> comcast
