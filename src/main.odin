@@ -1,5 +1,6 @@
 package main
 
+import "core:container/queue"
 import "core:fmt"
 import "core:intrinsics"
 import "core:math"
@@ -23,8 +24,7 @@ Node :: struct {
 	interfaces: [4]Interface,
 	routing_rules: [10]RoutingRule,
 
-	buffer_data: [10]Packet,
-	buffer: []Packet,
+	buffer: queue.Queue(Packet),
 }
 
 Interface :: struct {
@@ -78,7 +78,10 @@ make_node :: proc(pos: Vec2, ips: []string, routing_rules: []RoutingRule) -> Nod
 	for rule, i in routing_rules {
 		n.routing_rules[i] = rule
 	}
-	// TODO: set up buffer slice or whatever
+	if ok := queue.init(&n.buffer, 10); !ok {
+		fmt.println("Successfully failed to init queue.")
+		intrinsics.trap()
+	}
 	return n
 }
 
@@ -185,6 +188,11 @@ main :: proc() {
 		}
 	})
 
+	queue.push_back(&me.buffer, Packet{
+		src_ip = me.interfaces[0].ip,
+		dst_ip = discord_3.interfaces[0].ip,
+	})
+
 	append(&nodes,
 		me,
 		comcast,
@@ -245,10 +253,94 @@ main :: proc() {
 	)
 }
 
+trap :: proc() {
+	intrinsics.trap()
+}
+
+tick :: proc() {
+	PacketSend :: struct {
+		packet: Packet,
+		node: ^Node,
+	}
+	packet_sends := make([dynamic]PacketSend, context.temp_allocator)
+
+	nextnode:
+	for _, node_id in nodes {
+		node := &nodes[node_id]
+
+		packet, ok := queue.pop_front_safe(&node.buffer)
+		if !ok {
+			continue
+		}
+
+		// Handle packets destined for this node
+		is_for_me := false
+		for iface in node.interfaces {
+			if packet.dst_ip == iface.ip {
+				is_for_me = true
+				break
+			}
+		}
+		if is_for_me {
+			fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
+			continue
+		}
+
+		// Uh, route it somewhere else
+		for rule in node.routing_rules {
+			masked_dest := packet.dst_ip & rule.subnet_mask
+			if masked_dest == rule.ip {
+				if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
+					append(&packet_sends, PacketSend{
+						packet = packet,
+						node = dst_node,
+					})
+					fmt.printf("Node %d: here have packet!!\n", node_id)
+				} else {
+					fmt.printf("Node %d: bad routing rule! discarding packet.\n", node_id)
+				}
+				continue nextnode
+			}
+		}
+
+		// the hell is this packet
+		fmt.printf("Node %d: the hell is this packet? discarding\n", node_id)
+	}
+
+	for send in packet_sends {
+		queue.push_back(&send.node.buffer, send.packet)
+	}
+}
+
+get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
+	for _, conn_id in conns {
+		conn := &conns[conn_id]
+		matches_src := conn.src_id.node_id == my_node_id && conn.src_id.interface_id == my_interface_id
+		matches_dst := conn.dst_id.node_id == my_node_id && conn.dst_id.interface_id == my_interface_id
+		
+		other: ConnectionID
+		if matches_src {
+			other = conn.dst_id
+		} else if matches_dst {
+			other = conn.src_id
+		} else {
+			continue
+		}
+
+		return &nodes[other.node_id], true
+	}
+
+	return nil, false
+}
+
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
+	defer free_all(context.temp_allocator)
+
     t += dt
+
+	tick()
 
     canvas_clear()
 
@@ -262,6 +354,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), 0, 0, 0, 255, 3)
 	}
 
+	// render nodes
+	for i := 0; i < len(nodes); i += 1 {
+    	canvas_rect(nodes[i].pos.x, nodes[i].pos.y, node_size, node_size, 5, 0, 0, 0, 255)
+
+		ip_store := [16]u8{}
+		ip_str := ip_to_str(nodes[i].interfaces[0].ip, ip_store[:])
+		canvas_text(ip_str, nodes[i].pos.x, nodes[i].pos.y + node_size + 10, 0, 0, 0, 255)
+	}
+
 	// render packets
 	for i := 0; i < len(conns); i += 1 {
 		node_a := nodes[conns[i].src_id.node_id]
@@ -271,20 +372,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		a_center := [2]f32{node_a.pos.x + ((node_size / 2) - (packet_size / 2)), node_a.pos.y + ((node_size / 2) - (packet_size / 2))}
 		b_center := [2]f32{node_b.pos.x + ((node_size / 2) - (packet_size / 2)), node_b.pos.y + ((node_size / 2) - (packet_size / 2))}
 
-		perc := ((-math.cos_f32(t) + 1) / 2)
+		perc: f32 = 0 // TODO
 		lerped := ((1 - perc) * a_center) + (perc * b_center)
 		color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
 
 		canvas_rect(lerped.x, lerped.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
-	}
-
-	// render nodes
-	for i := 0; i < len(nodes); i += 1 {
-    	canvas_rect(nodes[i].pos.x, nodes[i].pos.y, node_size, node_size, 5, 0, 0, 0, 255)
-
-		ip_store := [16]u8{}
-		ip_str := ip_to_str(nodes[i].interfaces[0].ip, ip_store[:])
-		canvas_text(ip_str, nodes[i].pos.x, nodes[i].pos.y + node_size + 10, 0, 0, 0, 255)
 	}
 
     return true
@@ -308,6 +400,6 @@ foreign js {
     measure_text :: proc(str: string) -> f32 ---
 
     debugger :: proc() ---
-    logString :: proc(str: string) ---
-    logError :: proc(str: string) ---
+    log_string :: proc(str: string) ---
+    log_error :: proc(str: string) ---
 }
