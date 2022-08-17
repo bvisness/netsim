@@ -32,3 +32,30 @@ buffer_rect :: proc(n: ^Node) -> Rect {
         size = Vec2{node_size, height}
     }
 }
+
+ease_in :: proc(t: f32) -> f32 {
+    return 1 - math.cos((t * math.PI) / 2);
+}
+
+ease_in_out :: proc(t: f32) -> f32 {
+    return -(math.cos(math.PI * t) - 1) / 2;
+}
+
+ease_out_elastic :: proc(t: f32) -> f32 {
+    c4: f32 = (2 * f32(math.PI)) / 3
+
+    if t == 0 {
+        return 0
+    } else if t == 1 {
+        return 1
+    } else {
+        return math.pow(2, -10 * t) * math.sin((t * 10 - 0.75) * c4) + 1
+    }
+}
+
+ease_in_back :: proc(t: f32) -> f32 {
+    c1: f32 = 1.70158
+    c3: f32 = c1 + 1
+
+    return c3 * t * t * t - c1 * t * t
+}

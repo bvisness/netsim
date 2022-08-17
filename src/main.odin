@@ -63,10 +63,29 @@ Packet :: struct {
 
 	src_ip: u32,
 	dst_ip: u32,
+
+	// Properties for animation
+	anim: PacketAnimation,
+	// NOTE(ben): If / when we add node deletion, this could get into use-after-free territory.
+	// Maybe avoid it by not allowing editing while simulating...
+	src_node: ^Node,
+	dst_node: ^Node,
+	src_bufid: int,
+	dst_bufid: int,
+
+	created_t: f32, // when this transitioned to New
+}
+
+PacketAnimation :: enum {
+	None,
+	New,
+	Delivered,
+	Dropped,
 }
 
 nodes : [dynamic]Node
 conns : [dynamic]Connection
+exiting_packets : [dynamic]Packet
 
 t: f32 = 0
 min_width   : f32 = 10000
@@ -75,7 +94,11 @@ max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 40
 buffer_size : int = 10
-TICK_INTERVAL_S :: 0.2
+TICK_INTERVAL_S :: 1
+TICK_ANIM_DURATION_S :: 0.6
+NEW_ANIM_DURATION_S :: 0.4
+DONE_ANIM_DURATION_S :: 0.6
+DROPPED_ANIM_DURATION_S :: 0.8
 
 main :: proc() {
     arena_init(&global_arena, global_arena_data[:])
@@ -88,6 +111,7 @@ main :: proc() {
 
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
+	exiting_packets = make([dynamic]Packet)
 
 	if ok := load_config(net_config, &nodes, &conns); !ok {
 		fmt.printf("Failed to load config!\n")
@@ -125,16 +149,28 @@ main :: proc() {
 }
 
 tick :: proc() {
+	clear(&exiting_packets)
+
 	PacketSend :: struct {
 		packet: Packet,
-		node: ^Node,
+		src: ^Node,
+		dst: ^Node,
 	}
 	packet_sends := make([dynamic]PacketSend, context.temp_allocator)
 
 	nextnode:
-	for _, node_id in nodes {
-		node := &nodes[node_id]
-
+	for node, node_id in &nodes {
+		// Update packet animation data (for everything but the top one, which will be popped)
+		for i := 1; i < queue.len(node.buffer); i += 1 {
+			packet := queue.get_ptr(&node.buffer, i)
+			packet.anim = PacketAnimation.None
+			packet.src_node = &node
+			packet.src_bufid = i
+			packet.dst_node = &node
+			packet.dst_bufid = i - 1
+		}
+ 
+		// Try to send
 		packet, ok := queue.pop_front_safe(&node.buffer)
 		if !ok {
 			continue
@@ -150,6 +186,9 @@ tick :: proc() {
 		}
 		if is_for_me {
 			// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
+			packet.anim = PacketAnimation.Delivered
+			packet.dst_node = &node
+			append(&exiting_packets, packet)
 			continue
 		}
 
@@ -160,11 +199,14 @@ tick :: proc() {
 				if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
 					append(&packet_sends, PacketSend{
 						packet = packet,
-						node = dst_node,
+						src = &node,
+						dst = dst_node,
 					})
 					// fmt.printf("Node %d: here have packet!!\n", node_id)
 				} else {
 					// fmt.printf("Node %d: bad routing rule! discarding packet.\n", node_id)
+					packet.anim = PacketAnimation.Dropped
+					append(&exiting_packets, packet)
 				}
 				continue nextnode
 			}
@@ -172,15 +214,27 @@ tick :: proc() {
 
 		// the hell is this packet
 		// fmt.printf("Node %d: the hell is this packet? discarding\n", node_id)
+		packet.anim = PacketAnimation.Dropped
+		append(&exiting_packets, packet)
 	}
 
 	for send in packet_sends {
-		if queue.len(send.node.buffer) >= buffer_size {
+		if queue.len(send.dst.buffer) >= buffer_size {
 			// fmt.printf("Buffer full, packet dropped\n")
+			packet := send.packet
+			packet.anim = PacketAnimation.Dropped
+			append(&exiting_packets, packet)
 			continue
 		}
 
-		queue.push_back(&send.node.buffer, send.packet)
+		packet := send.packet
+		packet.anim = PacketAnimation.None
+		packet.src_node = send.src
+		packet.src_bufid = 0 // top of the buffer
+		packet.dst_node = send.dst
+		packet.dst_bufid = queue.len(send.dst.buffer)
+
+		queue.push_back(&send.dst.buffer, packet)
 	}
 }
 
@@ -231,8 +285,16 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				}
 
 				queue.push_back(&nodes[src_id].buffer, Packet{
+					anim = PacketAnimation.New,
 					src_ip = nodes[src_id].interfaces[0].ip,
 					dst_ip = nodes[dst_id].interfaces[0].ip,
+
+					// visualization
+					src_node = &nodes[src_id],
+					dst_node = &nodes[src_id], // not a mistake!
+					src_bufid = queue.len(nodes[src_id].buffer),
+					dst_bufid = queue.len(nodes[src_id].buffer),
+					created_t = t,
 				})
 			}
 		}
@@ -274,10 +336,39 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			canvas_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
 		}
 
-		// Draw buffer
+		// Draw node packets
 		for i := 0; i < queue.len(node.buffer); i += 1 {
-			pos := pos_in_buffer(&node, i)
-			canvas_circle(pos.x, pos.y, packet_size_in_buffer, 100, 100, 100, 255)
+			packet := queue.get_ptr(&node.buffer, i)
+
+			src_pos := pos_in_buffer(packet.src_node, packet.src_bufid)
+			dst_pos := pos_in_buffer(packet.dst_node, packet.dst_bufid)
+			pos_t := clamp(0, 1, (t - last_tick_t) / TICK_ANIM_DURATION_S)
+			pos := math.lerp(src_pos, dst_pos, ease_in_out(pos_t))
+
+			size := packet_size_in_buffer
+			if packet.anim == PacketAnimation.New {
+				size_t := clamp(0, 1, (t - packet.created_t) / NEW_ANIM_DURATION_S)
+				size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
+			}
+
+			canvas_circle(pos.x, pos.y, size, 100, 100, 100, 255)
+			packet.pos = pos
+		}
+	}
+
+	// Draw exiting packets
+	for packet in exiting_packets {
+		#partial switch packet.anim {
+		case .Delivered:
+			anim_t := clamp(0, 1, (t - last_tick_t) / DONE_ANIM_DURATION_S)
+			pos := math.lerp(packet.pos, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_back(anim_t))
+			size := math.lerp(packet_size_in_buffer, 0, ease_in(anim_t))
+			canvas_circle(pos.x, pos.y, size, 100, 100, 100, 255)
+		case .Dropped:
+			anim_t := clamp(0, 1, (t - last_tick_t) / DROPPED_ANIM_DURATION_S)
+			pos := math.lerp(packet.pos, packet.pos + Vec2{0, 25}, ease_in(anim_t))
+			alpha := int(math.lerp(f32(255), f32(0), anim_t))
+			canvas_circle(pos.x, pos.y, packet_size_in_buffer, 100, 100, 100, alpha)
 		}
 	}
 
