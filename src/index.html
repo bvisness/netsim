@@ -122,6 +122,13 @@
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
 						ctx.fill();
 					},
+					canvas_circle(x, y, radius, red, green, blue, alpha) {
+						ctx.beginPath();
+						ctx.arc(x * dpr, y * dpr, radius * dpr, 0, 2*Math.PI, true);
+
+						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
+						ctx.fill();
+					},
 					canvas_text(strP, strLen, x, y, r, g, b, a) {
 						const str = window.wasm.odinMem.loadString(strP, strLen);
 						ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;

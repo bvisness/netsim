@@ -17,7 +17,11 @@ temp_arena := Arena{}
 
 wasmContext := runtime.default_context()
 
-Vec2 :: distinct [2]f32
+Vec2 :: [2]f32
+Rect :: struct {
+	pos: Vec2,
+	size: Vec2,
+}
 
 Node :: struct {
 	pos: Vec2,
@@ -70,8 +74,6 @@ min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 40
-node_size   : f32 = 50
-packet_size : f32 = 30
 buffer_size : int = 10
 TICK_INTERVAL_S :: 0.2
 
@@ -249,24 +251,33 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// render nodes
-	for node in nodes {
+	for node in &nodes {
     	canvas_rect(node.pos.x, node.pos.y, node_size, node_size, 5, 0, 0, 0, 255)
 
-		ip_pad : f32 = 5 
-		ip_offset : f32 = 16
-		for interface, i in node.interfaces {
-			ip_store := [16]u8{}
-			ip_str := ip_to_str(interface.ip, ip_store[:])
-			canvas_text(ip_str, node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
-		}
+		// Draw interface IPs
+		// ip_pad : f32 = 5 
+		// ip_offset : f32 = 16
+		// for interface, i in node.interfaces {
+		// 	ip_store := [16]u8{}
+		// 	ip_str := ip_to_str(interface.ip, ip_store[:])
+		// 	canvas_text(ip_str, node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
+		// }
 
-		canvas_text(fmt.tprintf("%s [%d]", node.name, queue.len(node.buffer)), node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
+		// Draw label
+		canvas_text(node.name, node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
 
+		// Draw ???
 		if queue.len(node.buffer) > 0 {
 			pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
 			color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
 
 			canvas_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
+		}
+
+		// Draw buffer
+		for i := 0; i < queue.len(node.buffer); i += 1 {
+			pos := pos_in_buffer(&node, i)
+			canvas_circle(pos.x, pos.y, packet_size_in_buffer, 100, 100, 100, 255)
 		}
 	}
 
