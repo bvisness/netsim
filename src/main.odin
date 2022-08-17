@@ -70,6 +70,7 @@ max_height  : f32 = 0
 pad_size    : f32 = 30
 node_size   : f32 = 50
 packet_size : f32 = 30
+buffer_size : int = 10
 
 make_node :: proc(pos: Vec2, ips: []string, routing_rules: []RoutingRule) -> Node {
 	n := Node{pos = pos}
@@ -320,6 +321,11 @@ tick :: proc() {
 	}
 
 	for send in packet_sends {
+		if queue.len(send.node.buffer) >= buffer_size {
+			// fmt.printf("Buffer full, packet dropped\n")
+			continue
+		}
+
 		queue.push_back(&send.node.buffer, send.packet)
 	}
 }
@@ -363,10 +369,19 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		tick()
 
 		if tick_count % 3 == 0 {
-			queue.push_back(&nodes[0].buffer, Packet{
-				src_ip = nodes[0].interfaces[0].ip,
-				dst_ip = nodes[rand.int31() % 3 + 5].interfaces[0].ip,
-			})
+			for i := 0; i < 10; i += 1 {
+				src_id := int(rand.int31()) % len(nodes)
+				dst_id := int(rand.int31()) % len(nodes)
+
+				if queue.len(nodes[src_id].buffer) >= buffer_size {
+					continue
+				}
+
+				queue.push_back(&nodes[src_id].buffer, Packet{
+					src_ip = nodes[src_id].interfaces[0].ip,
+					dst_ip = nodes[dst_id].interfaces[0].ip,
+				})
+			}
 		}
 	}
 
