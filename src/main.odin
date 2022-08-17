@@ -82,7 +82,7 @@ make_node :: proc(pos: Vec2, ips: []string, routing_rules: []RoutingRule) -> Nod
 	for rule, i in routing_rules {
 		n.routing_rules[i] = rule
 	}
-	if ok := queue.init(&n.buffer, 10); !ok {
+	if ok := queue.init(&n.buffer, buffer_size); !ok {
 		fmt.println("Successfully failed to init queue.")
 		intrinsics.trap()
 	}
@@ -90,8 +90,6 @@ make_node :: proc(pos: Vec2, ips: []string, routing_rules: []RoutingRule) -> Nod
 }
 
 main :: proc() {
-    fmt.println("Hellope!")
-
     arena_init(&global_arena, global_arena_data[:])
     arena_init(&temp_arena, temp_arena_data[:])
 
