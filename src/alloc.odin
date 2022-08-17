@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import "core:intrinsics"
 import "core:mem"
 import "core:runtime"
@@ -49,7 +50,8 @@ arena_allocator_proc :: proc(
 		total_size := size + mem.ptr_sub((^byte)(ptr), (^byte)(end))
 
 		if arena.offset + total_size > len(arena.data) {
-			return nil, .Out_Of_Memory
+			fmt.println("Out of memory!")
+			intrinsics.trap()
 		}
 
 		arena.offset += total_size

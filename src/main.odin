@@ -1,33 +1,58 @@
 package main
 
 import "core:fmt"
+import "core:intrinsics"
 import "core:math"
 import "core:mem"
 import "core:runtime"
 import "core:strings"
 
-global_arena_data := [1024]byte{}
+global_arena_data := [1_000_000]byte{}
 global_arena := Arena{}
 
-temp_arena_data := [1024]byte{}
+temp_arena_data := [1_000_000]byte{}
 temp_arena := Arena{}
 
 wasmContext := runtime.default_context()
 
-Node :: struct {
-	pos: [2]f32,
+Vec2 :: distinct [2]f32
 
+Node :: struct {
+	pos: Vec2,
+
+	interfaces: [4]Interface,
+	routing_rules: [10]RoutingRule,
+
+	buffer_data: [10]Packet,
+	buffer: []Packet,
+}
+
+Interface :: struct {
 	ip: u32,
-	iptable: [10]u32,
+
+	// stats?
+	// buffers?
+}
+
+RoutingRule :: struct {
+	ip: u32, subnet_mask: u32,
+	interface_id: int,
 }
 
 Connection :: struct {
-	src_id: int,
-	dst_id: int,
+	src_id: ConnectionID,
+	dst_id: ConnectionID,
+
+	loss_factor: f32, // 0 = no loss, 1 = all packets are dropped
+}
+
+ConnectionID :: struct {
+	node_id: int,
+	interface_id: int,
 }
 
 Packet :: struct {
-	pos: [2]f32,
+	pos: Vec2,
 
 	src_ip: u32,
 	dst_ip: u32,
@@ -35,7 +60,6 @@ Packet :: struct {
 
 nodes : [dynamic]Node
 conns : [dynamic]Connection
-
 
 t: f32 = 0
 max_width   : f32 = 0
@@ -94,6 +118,28 @@ str_to_ip :: proc(ip: string) -> (u32, bool) {
 	return ip, true
 }
 
+must_str_to_ip :: proc(ip: string) -> u32 {
+	ipNum, ok := str_to_ip(ip)
+	if !ok {
+		intrinsics.trap()
+	}
+	return ipNum
+}
+
+make_node :: proc(pos: Vec2, ip: string) -> Node {
+	n := Node{pos = pos}
+	n.interfaces[0] = Interface{
+		ip = must_str_to_ip(ip),
+	}
+	n.routing_rules[0] = RoutingRule{
+		ip = must_str_to_ip("192.168.1.0"),
+		subnet_mask = must_str_to_ip("255.255.255.0"),
+		interface_id = 0,
+	}
+	// TODO: set up buffer slice or whatever
+	return n
+}
+
 main :: proc() {
     fmt.println("Hellope!")
 
@@ -108,35 +154,12 @@ main :: proc() {
 	nodes = make([dynamic]Node, 0)
 	conns = make([dynamic]Connection, 0)
 
-	// This is gross.. Replace this when possible
-	ip_strs := [4]string{"192.168.1.1", "10.0.0.1", "172.168.1.1", "172.168.1.2"}
-	ips := [4]u32{}
-
-	for i := 0; i < len(ip_strs); i += 1 {
-		ip, ok := str_to_ip(ip_strs[i])
-		if !ok {
-			fmt.println("Failed to parse IP!")
-		}
-
-		ips[i] = ip
-	}
-
-	append(&nodes, Node{
-		pos = {0, 400},
-		ip = ips[0],
-	})
-	append(&nodes, Node{
-		pos = {400, 400},
-		ip = ips[1],
-	})
-	append(&nodes, Node{
-		pos = {800, 0},
-		ip = ips[2],
-	})
-	append(&nodes, Node{
-		pos = {800, 800},
-		ip = ips[3],
-	})
+	append(&nodes,
+		make_node(Vec2{0, 400}, "192.168.1.1"),
+		make_node(Vec2{400, 400}, "10.0.0.1"),
+		make_node(Vec2{800, 0}, "172.168.1.1"),
+		make_node(Vec2{800, 800}, "172.168.1.2"),
+	)
 
 	for i := 0; i < len(nodes); i += 1 {
 		node := &nodes[i]
@@ -154,9 +177,18 @@ main :: proc() {
 	max_width += node_size
 	max_height += node_size
 
-	append(&conns, Connection{src_id = 0, dst_id = 1})
-	append(&conns, Connection{src_id = 1, dst_id = 2})
-	append(&conns, Connection{src_id = 1, dst_id = 3})
+	append(&conns, Connection{
+		src_id = ConnectionID{node_id = 0},
+		dst_id = ConnectionID{node_id = 1},
+	})
+	append(&conns, Connection{
+		src_id = ConnectionID{node_id = 1},
+		dst_id = ConnectionID{node_id = 2},
+	})
+	append(&conns, Connection{
+		src_id = ConnectionID{node_id = 1},
+		dst_id = ConnectionID{node_id = 3},
+	})
 }
 
 @export
@@ -171,15 +203,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// render lines
 	for i := 0; i < len(conns); i += 1 {
-		node_a := nodes[conns[i].src_id]
-		node_b := nodes[conns[i].dst_id]
+		node_a := nodes[conns[i].src_id.node_id]
+		node_b := nodes[conns[i].dst_id.node_id]
 		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), 0, 0, 0, 255, 3)
 	}
 
 	// render packets
 	for i := 0; i < len(conns); i += 1 {
-		node_a := nodes[conns[i].src_id]
-		node_b := nodes[conns[i].dst_id]
+		node_a := nodes[conns[i].src_id.node_id]
+		node_b := nodes[conns[i].dst_id.node_id]
 
 		pkt := Packet{pos = node_a.pos}
 		a_center := [2]f32{node_a.pos.x + ((node_size / 2) - (packet_size / 2)), node_a.pos.y + ((node_size / 2) - (packet_size / 2))}
@@ -197,7 +229,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     	canvas_rect(nodes[i].pos.x, nodes[i].pos.y, node_size, node_size, 5, 0, 0, 0, 255)
 
 		ip_store := [16]u8{}
-		ip_str := ip_to_str(nodes[i].ip, ip_store[:])
+		ip_str := ip_to_str(nodes[i].interfaces[0].ip, ip_store[:])
 		canvas_text(ip_str, nodes[i].pos.x, nodes[i].pos.y + node_size + 10, 0, 0, 0, 255)
 	}
 
