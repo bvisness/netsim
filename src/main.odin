@@ -70,7 +70,7 @@ min_width   : f32 = 10000
 min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
-pad_size    : f32 = 30
+pad_size    : f32 = 40
 node_size   : f32 = 50
 packet_size : f32 = 30
 buffer_size : int = 10
@@ -473,7 +473,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			canvas_text(ip_str, node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
 		}
 
-		canvas_text(fmt.tprintf("%s %d", node.name, queue.len(node.buffer)), node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
+		canvas_text(fmt.tprintf("%s [%d]", node.name, queue.len(node.buffer)), node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
 
 		if queue.len(node.buffer) > 0 {
 			pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
