@@ -1,6 +1,5 @@
 package main
 
-import "core:container/priority_queue"
 import "core:container/queue"
 import "core:fmt"
 import "core:intrinsics"
@@ -18,81 +17,6 @@ temp_arena := Arena{}
 
 wasmContext := runtime.default_context()
 
-Vec2 :: [2]f32
-Vec3 :: [3]f32
-Rect :: struct {
-	pos: Vec2,
-	size: Vec2,
-}
-
-Node :: struct {
-	pos: Vec2,
-
-	name: string,
-	interfaces: []Interface,
-	routing_rules: []RoutingRule,
-
-	buffer: queue.Queue(Packet),
-}
-
-Interface :: struct {
-	ip: u32,
-
-	// stats?
-	// buffers?
-}
-
-RoutingRule :: struct {
-	ip: u32, 
-	subnet_mask: u32,
-	interface_id: int,
-}
-
-Connection :: struct {
-	src_id: ConnectionID,
-	dst_id: ConnectionID,
-
-	loss_factor: f32, // 0 = no loss, 1 = all packets are dropped
-}
-
-ConnectionID :: struct {
-	node_id: int,
-	interface_id: int,
-}
-
-Packet :: struct {
-	src_ip: u32,
-	dst_ip: u32,
-
-	// Properties for visualization
-	pos: Vec2,
-	last_pos: Vec2,
-	color: Vec3,
-	anim: PacketAnimation,
-	// NOTE(ben): If / when we add node deletion, this could get into use-after-free territory.
-	// Maybe avoid it by not allowing editing while simulating...
-	src_node: ^Node,
-	dst_node: ^Node,
-	src_bufid: int,
-	dst_bufid: int,
-
-	created_t: f32, // when this transitioned to New
-
-	delivered_t: f32,
-
-	dropped_t: f32,
-	velocity: Vec2, // for dropping
-	drop_at_dst: bool,
-	initialized_drop_at_dst: bool,
-}
-
-PacketAnimation :: enum {
-	None,
-	New,
-	Delivered,
-	Dropped,
-}
-
 nodes : [dynamic]Node
 conns : [dynamic]Connection
 exiting_packets : [dynamic]Packet
@@ -103,7 +27,7 @@ min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 40
-buffer_size : int = 5
+buffer_size : int = 15
 running := true
 TIMESCALE :: 1
 TICK_INTERVAL_S :: 0.7 * TIMESCALE
@@ -334,9 +258,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
     canvas_clear()
-
-	// render padded background
-	canvas_rect(pad_size, pad_size, max_width, max_height, 0, 220, 220, 220, 255)
 
 	// render lines
 	for conn in conns {
