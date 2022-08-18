@@ -4,8 +4,8 @@ import "core:fmt"
 import "core:intrinsics"
 import "core:strings"
 
-ip_to_str :: proc(ip: u32, ip_store: []u8) -> string {
-	b := strings.builder_from_bytes(ip_store[:])
+ip_to_str :: proc(ip: u32, allocator := context.temp_allocator) -> string {
+	b := strings.builder_make(allocator)
 
 	ip_bytes := transmute([4]u8)ip
 	fmt.sbprintf(&b, "%v.%v.%v.%v", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3])

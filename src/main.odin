@@ -95,6 +95,7 @@ max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 40
 buffer_size : int = 10
+running := true
 TICK_INTERVAL_S :: 0.8
 TICK_ANIM_DURATION_S :: 0.4
 NEW_ANIM_DURATION_S :: 0.3
@@ -193,9 +194,11 @@ tick :: proc() {
 			continue
 		}
 
+		// fmt.printf("Checking node %s\n", node.name)
 		// Uh, route it somewhere else
 		for rule in node.routing_rules {
 			masked_dest := packet.dst_ip & rule.subnet_mask
+			// fmt.printf("%s & %s (%s) == %s?\n", ip_to_str(packet.dst_ip), ip_to_str(rule.subnet_mask), ip_to_str(masked_dest), ip_to_str(rule.ip))
 			if masked_dest == rule.ip {
 				if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
 					append(&packet_sends, PacketSend{
@@ -205,16 +208,19 @@ tick :: proc() {
 					})
 					// fmt.printf("Node %d: here have packet!!\n", node_id)
 				} else {
-					// fmt.printf("Node %d: bad routing rule! discarding packet.\n", node_id)
+					// fmt.printf("Node %s [%s]: bad routing rule! discarding packet.\n", node.name, ip_to_str(node.interfaces[0].ip))
+					// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
 					packet.anim = PacketAnimation.Dropped
 					append(&exiting_packets, packet)
+					running = false
 				}
 				continue nextnode
 			}
 		}
 
 		// the hell is this packet
-		// fmt.printf("Node %d: the hell is this packet? discarding\n", node_id)
+		// fmt.printf("Node %s [%s]: the hell is this packet? discarding\n", node.name, ip_to_str(node.interfaces[0].ip))
+		// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
 		packet.anim = PacketAnimation.Dropped
 		append(&exiting_packets, packet)
 	}
@@ -266,6 +272,10 @@ last_tick_t := t
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
+	if !running {
+		return false
+	}
+
 	defer free_all(context.temp_allocator)
 
     t += dt

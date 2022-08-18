@@ -1222,10 +1222,12 @@ function odinSetupDefaultImports(wasmMemoryInterface, consoleElement) {
 				println(lines[i]);
 			}
 			let last = lines[lines.length-1];
-			if (printLast) {
-				println(last);
-			} else {
-				currentLine[isError] = last;
+			if (last !== "") {
+				if (printLast) {
+					println(last);
+				} else {
+					currentLine[isError] = last;
+				}
 			}
 		}
 
