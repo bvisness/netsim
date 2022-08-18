@@ -363,7 +363,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// render history graph
 	graph_size : f32 = 400
 	char_width : f32 = 6.35
-	header_str := "Avg Ticks Over Time"
+	header_str := "Average Packet Ticks Over Time"
 	center_offset := (graph_size / 2) - ((f32(len(header_str)) * char_width) / 2)
 	canvas_text(header_str, menu_offset + center_offset, pad_size + ((text_height + 4) * 7) + pad_size, text_color2.x, text_color2.y, text_color2.z, 255)
 
