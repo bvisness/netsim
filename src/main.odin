@@ -26,26 +26,16 @@ min_width   : f32 = 10000
 min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
+
+bg_color    := Vec3{}
+text_color  := Vec3{}
+text_color2 := Vec3{}
+line_color  := Vec3{}
+node_color  := Vec3{}
+
 pad_size    : f32 = 40
 buffer_size : int = 15
 running := true
-
-// Dark mode
-dark_bg_color   := Vec3{15, 15, 15}
-dark_text_color := Vec3{255, 255, 255}
-dark_line_color := Vec3{120, 120, 120}
-dark_node_color := Vec3{180, 180, 180}
-
-// Light mode
-light_bg_color   := Vec3{250, 250, 250}
-light_text_color := Vec3{0, 0, 0}
-light_line_color := Vec3{200, 200, 200}
-light_node_color := Vec3{70, 70, 70}
-
-bg_color   := light_bg_color
-text_color := light_text_color
-line_color := light_line_color
-node_color := light_node_color
 
 TICK_INTERVAL_BASE :: 0.7
 TICK_ANIM_DURATION_BASE :: 0.7
@@ -70,15 +60,17 @@ set_timescale :: proc(new_timescale: f32) {
 @export
 set_color_mode :: proc "contextless" (is_dark: bool) {
 	if is_dark {
-		bg_color   = dark_bg_color
-		text_color = dark_text_color
-		line_color = dark_line_color
-		node_color = dark_node_color
+		bg_color    = Vec3{15, 15, 15}
+		text_color  = Vec3{255, 255, 255}
+		text_color2 = Vec3{180, 180, 180}
+		line_color  = Vec3{120, 120, 120}
+		node_color  = Vec3{180, 180, 180}
 	} else {
-		bg_color   = light_bg_color
-		text_color = light_text_color
-		line_color = light_line_color
-		node_color = light_node_color
+		bg_color    = Vec3{250, 250, 250}
+		text_color  = Vec3{0, 0, 0}
+		text_color2 = Vec3{80, 80, 80}
+		line_color  = Vec3{200, 200, 200}
+		node_color  = Vec3{70, 70, 70}
 	}
 }
 
@@ -150,6 +142,8 @@ tick :: proc() {
 			packet.src_bufid = i
 			packet.dst_node = &node
 			packet.dst_bufid = i - 1
+
+			packet.tick_life += 1
 		}
  
 		// Try to send
@@ -168,6 +162,7 @@ tick :: proc() {
 		}
 		if is_for_me {
 			// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
+
 			packet.anim = PacketAnimation.Delivered
 			packet.dst_node = &node
 			packet.delivered_t = t
@@ -182,6 +177,10 @@ tick :: proc() {
 			// fmt.printf("%s & %s (%s) == %s?\n", ip_to_str(packet.dst_ip), ip_to_str(rule.subnet_mask), ip_to_str(masked_dest), ip_to_str(rule.ip))
 			if masked_dest == rule.ip {
 				if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
+
+					node.sent += 1
+					dst_node.received += 1
+					packet.ttl += 1
 					append(&packet_sends, PacketSend{
 						packet = packet,
 						src = &node,
@@ -191,6 +190,7 @@ tick :: proc() {
 				} else {
 					// fmt.printf("Node %s [%s]: bad routing rule! discarding packet.\n", node.name, ip_to_str(node.interfaces[0].ip))
 					// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
+					node.dropped += 1
 					drop_packet(packet)
 					running = false
 				}
@@ -201,6 +201,7 @@ tick :: proc() {
 		// the hell is this packet
 		// fmt.printf("Node %s [%s]: the hell is this packet? discarding\n", node.name, ip_to_str(node.interfaces[0].ip))
 		// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
+		node.dropped += 1
 		drop_packet(packet)
 	}
 
@@ -214,6 +215,7 @@ tick :: proc() {
 
 		if queue.len(send.dst.buffer) >= buffer_size {
 			// fmt.printf("Buffer full, packet dropped\n")
+			packet.dst_node.dropped += 1
 			drop_packet(packet, true)
 			continue
 		}
@@ -307,6 +309,42 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     canvas_clear()
     canvas_rect(0, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
 
+	// draw graph border
+	canvas_line(max_width + pad_size, 0, max_width + pad_size, max_height + pad_size + 1.5, line_color.x, line_color.y, line_color.z, 255, 3)
+	canvas_line(0, max_height + pad_size, max_width + pad_size, max_height + pad_size, line_color.x, line_color.y, line_color.z, 255, 3)
+
+	menu_offset := max_width + (pad_size * 2)
+	text_height : f32 = 16
+
+	// This is cheaty, make this user driven
+	inspect_node := nodes[4]
+
+	canvas_text("Node Inspector", menu_offset, pad_size, text_color.x, text_color.y, text_color.z, 255)
+	canvas_text(fmt.tprintf("Name: %s", inspect_node.name), menu_offset, pad_size + text_height + 4, text_color2.x, text_color2.y, text_color2.z, 255)
+	canvas_text(fmt.tprintf("Sent: %d", inspect_node.sent), menu_offset, pad_size + ((text_height + 4) * 2), text_color2.x, text_color2.y, text_color2.z, 255)
+	canvas_text(fmt.tprintf("Received: %d", inspect_node.received), menu_offset, pad_size + ((text_height + 4) * 3), text_color2.x, text_color2.y, text_color2.z, 255)
+	canvas_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), menu_offset, pad_size + ((text_height + 4) * 4), text_color2.x, text_color2.y, text_color2.z, 255)
+
+	buffer_used := min(buffer_size, queue.len(inspect_node.buffer))
+	canvas_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), menu_offset, pad_size + ((text_height + 4) * 5), text_color2.x, text_color2.y, text_color2.z, 255)
+
+	average_packet_ticks : u32 = 0
+	average_packet_ttl   : u32 = 0
+	node_packet_count := queue.len(inspect_node.buffer)
+
+	if node_packet_count > 0 {
+		for i := 0; i < node_packet_count; i += 1 {
+			packet := queue.get_ptr(&inspect_node.buffer, i)
+			average_packet_ticks += packet.tick_life
+			average_packet_ttl += packet.ttl
+		}
+		average_packet_ticks /= u32(node_packet_count)
+		average_packet_ttl /= u32(node_packet_count)
+	}
+
+	canvas_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), menu_offset, pad_size + ((text_height + 4) * 6), text_color2.x, text_color2.y, text_color2.z, 255)
+	canvas_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), menu_offset, pad_size + ((text_height + 4) * 7), text_color2.x, text_color2.y, text_color2.z, 255)
+
 	// render lines
 	for conn in conns {
 		node_a := nodes[conn.src_id.node_id]
@@ -322,9 +360,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// ip_pad : f32 = 5 
 		// ip_offset : f32 = 16
 		// for interface, i in node.interfaces {
-		// 	ip_store := [16]u8{}
-		// 	ip_str := ip_to_str(interface.ip, ip_store[:])
-		// 	canvas_text(ip_str, node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
+		// 	canvas_text(ip_to_str(interface.ip), node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
 		// }
 
 		// Draw label

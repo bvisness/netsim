@@ -303,6 +303,7 @@
 				wakeUp();
 			});
 
+			// Set up default colors
 			if (window.matchMedia) {
 				let is_dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 				window.wasm.set_color_mode(is_dark);
@@ -311,6 +312,8 @@
 					let is_dark = event.matches;
 					window.wasm.set_color_mode(is_dark);
 				})
+			} else {
+				window.wasm.set_color_mode(false);
 			}
 
 			function updateCanvasSize() {

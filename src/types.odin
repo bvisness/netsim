@@ -16,6 +16,10 @@ Node :: struct {
 	interfaces: []Interface,
 	routing_rules: []RoutingRule,
 
+	sent: u64,
+	received: u64,
+	dropped: u64,
+
 	buffer: queue.Queue(Packet),
 }
 
@@ -53,6 +57,9 @@ Packet :: struct {
 	ack_number: u32,
 	tcp_flags: u16,
 	window_size: u16,
+	
+	ttl: u32,
+	tick_life: u32,
 
 	// Properties for visualization
 	pos: Vec2,
