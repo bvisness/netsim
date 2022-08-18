@@ -148,6 +148,11 @@ tick :: proc() {
 			packet.tick_life += 1
 		}
 
+		node.old_received = node.received
+		node.old_sent     = node.sent
+		node.old_dropped  = node.dropped
+
+		// Get average packet lifetime for the node
 		average_packet_ticks : u32 = 0
 		if queue.len(node.buffer) > 0 {
 			for i := 0; i < queue.len(node.buffer); i += 1 {
@@ -237,6 +242,23 @@ tick :: proc() {
 		}
 
 		queue.push_back(&send.dst.buffer, packet)
+	}
+
+	// Update stat histories
+	for node in &nodes {
+		if queue.len(node.avg_recv_history) >= history_size {
+			queue.pop_front(&node.avg_recv_history)
+		}
+		if queue.len(node.avg_sent_history) >= history_size {
+			queue.pop_front(&node.avg_sent_history)
+		}
+		if queue.len(node.avg_drop_history) >= history_size {
+			queue.pop_front(&node.avg_drop_history)
+		}
+
+		queue.push_back(&node.avg_recv_history, u32(node.received - node.old_received))
+		queue.push_back(&node.avg_sent_history, u32(node.sent - node.old_sent))
+		queue.push_back(&node.avg_drop_history, u32(node.dropped - node.old_dropped))
 	}
 }
 
@@ -362,7 +384,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// render history graph
 	graph_top := ((text_height + 4) * 7) + (pad_size * 2)
-	draw_graph("Average Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset, graph_top, 400)
+	graph_size : f32 = 200
+	graph_gap : f32 = (text_height + 4) * 2
+	draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, menu_offset, graph_top, graph_size)
+	draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
+	draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
+	draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
 
 	// render lines
 	for conn in conns {
@@ -473,6 +500,8 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 
 draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
 	char_width : f32 = 6.35
+	line_width : f32 = 1
+
 	center_offset := (size / 2) - ((f32(len(header)) * char_width) / 2)
 	canvas_text(header, x + center_offset, y, text_color2.x, text_color2.y, text_color2.z, 255)
 
@@ -500,14 +529,21 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	for i := 0; i < queue.len(history^); i += 1 {
 		entry := queue.get(history, i)
 
-		point_x_offset := f32(i) * (graph_x_bounds / f32(queue.len(history^)))
-		point_y_offset := f32(entry - min_val) * (graph_y_bounds / f32(max_range))
+		point_x_offset : f32 = 0
+		if queue.len(history^) != 0 {
+			point_x_offset = f32(i) * (graph_x_bounds / f32(queue.len(history^)))
+		}
+
+		point_y_offset : f32 = 0
+		if max_range != 0 {
+			point_y_offset = f32(entry - min_val) * (graph_y_bounds / f32(max_range))
+		}
 
 		point_x := x + point_x_offset + (graph_edge_pad / 2)
 		point_y := graph_top + size - point_y_offset - graph_edge_pad
 
 		if queue.len(history^) > 1  && i > 0 {
-			canvas_line(last_x, last_y, point_x, point_y, text_color.x, text_color.y, text_color.z, 255, 2)
+			canvas_line(last_x, last_y, point_x, point_y, text_color.x, text_color.y, text_color.z, 255, line_width)
 		}
 
 		last_x = point_x

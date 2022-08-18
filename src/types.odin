@@ -1,6 +1,8 @@
 package main
 
 import "core:container/queue"
+import "core:intrinsics"
+import "core:fmt"
 
 Vec2 :: [2]f32
 Vec3 :: [3]f32
@@ -17,10 +19,18 @@ Node :: struct {
 	routing_rules: []RoutingRule,
 
 	sent: u64,
+	old_sent: u64,
+
 	received: u64,
+	old_received: u64,
+
 	dropped: u64,
+	old_dropped: u64,
 
 	avg_tick_history: queue.Queue(u32),
+	avg_recv_history: queue.Queue(u32),
+	avg_sent_history: queue.Queue(u32),
+	avg_drop_history: queue.Queue(u32),
 
 	buffer: queue.Queue(Packet),
 }
@@ -114,4 +124,35 @@ TcpSession :: struct {
     send_unacknowledged: u32,
     send_next: u32,
     send_window: u32,
+}
+
+make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rules: []RoutingRule) -> Node {
+	n := Node{pos = pos}
+
+	n.name = name
+	n.interfaces = interfaces
+	n.routing_rules = routing_rules
+
+	if ok := queue.init(&n.buffer, buffer_size); !ok {
+		fmt.println("Successfully failed to init packet queue.")
+		intrinsics.trap()
+	}
+
+	if ok := queue.init(&n.avg_tick_history, history_size); !ok {
+		fmt.println("Successfully failed to init stat queue.")
+		intrinsics.trap()
+	}
+	if ok := queue.init(&n.avg_recv_history, history_size); !ok {
+		fmt.println("Successfully failed to init stat queue.")
+		intrinsics.trap()
+	}
+	if ok := queue.init(&n.avg_sent_history, history_size); !ok {
+		fmt.println("Successfully failed to init stat queue.")
+		intrinsics.trap()
+	}
+	if ok := queue.init(&n.avg_drop_history, history_size); !ok {
+		fmt.println("Successfully failed to init stat queue.")
+		intrinsics.trap()
+	}
+	return n
 }

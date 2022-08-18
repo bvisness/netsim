@@ -76,25 +76,6 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 	return true
 }
 
-make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rules: []RoutingRule) -> Node {
-	n := Node{pos = pos}
-
-	n.name = name
-	n.interfaces = interfaces
-	n.routing_rules = routing_rules
-
-	if ok := queue.init(&n.buffer, buffer_size); !ok {
-		fmt.println("Successfully failed to init packet queue.")
-		intrinsics.trap()
-	}
-
-	if ok := queue.init(&n.avg_tick_history, history_size); !ok {
-		fmt.println("Successfully failed to init stat queue.")
-		intrinsics.trap()
-	}
-	return n
-}
-
 net_config := `
 {
 	"nodes": [
