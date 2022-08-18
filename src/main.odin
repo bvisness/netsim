@@ -65,6 +65,7 @@ Packet :: struct {
 
 	// Properties for visualization
 	pos: Vec2,
+	last_pos: Vec2,
 	color: Vec3,
 	anim: PacketAnimation,
 	// NOTE(ben): If / when we add node deletion, this could get into use-after-free territory.
@@ -75,6 +76,9 @@ Packet :: struct {
 	dst_bufid: int,
 
 	created_t: f32, // when this transitioned to New
+
+	velocity: Vec2, // for dropping
+	drop_at_dst: bool,
 }
 
 PacketAnimation :: enum {
@@ -94,13 +98,15 @@ min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
 pad_size    : f32 = 40
-buffer_size : int = 10
+buffer_size : int = 5
 running := true
-TICK_INTERVAL_S :: 0.8
-TICK_ANIM_DURATION_S :: 0.4
-NEW_ANIM_DURATION_S :: 0.3
-DONE_ANIM_DURATION_S :: 0.7
-DROPPED_ANIM_DURATION_S :: 0.6
+TIMESCALE :: 1
+TICK_INTERVAL_S :: 0.7 * TIMESCALE
+TICK_ANIM_DURATION_S :: 0.7 * TIMESCALE
+NEW_ANIM_DURATION_S :: 0.3 * TIMESCALE
+DONE_ANIM_DURATION_S :: 0.7 * TIMESCALE
+DROPPED_ANIM_DURATION_S :: 0.6 * TIMESCALE
+DROPPED_AT_DST_TIME_S :: 0.4 * TIMESCALE
 
 main :: proc() {
     arena_init(&global_arena, global_arena_data[:])
@@ -210,8 +216,7 @@ tick :: proc() {
 				} else {
 					// fmt.printf("Node %s [%s]: bad routing rule! discarding packet.\n", node.name, ip_to_str(node.interfaces[0].ip))
 					// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
-					packet.anim = PacketAnimation.Dropped
-					append(&exiting_packets, packet)
+					drop_packet(packet)
 					running = false
 				}
 				continue nextnode
@@ -221,19 +226,10 @@ tick :: proc() {
 		// the hell is this packet
 		// fmt.printf("Node %s [%s]: the hell is this packet? discarding\n", node.name, ip_to_str(node.interfaces[0].ip))
 		// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
-		packet.anim = PacketAnimation.Dropped
-		append(&exiting_packets, packet)
+		drop_packet(packet)
 	}
 
 	for send in packet_sends {
-		if queue.len(send.dst.buffer) >= buffer_size {
-			// fmt.printf("Buffer full, packet dropped\n")
-			packet := send.packet
-			packet.anim = PacketAnimation.Dropped
-			append(&exiting_packets, packet)
-			continue
-		}
-
 		packet := send.packet
 		packet.anim = PacketAnimation.None
 		packet.src_node = send.src
@@ -241,8 +237,24 @@ tick :: proc() {
 		packet.dst_node = send.dst
 		packet.dst_bufid = queue.len(send.dst.buffer)
 
+		if queue.len(send.dst.buffer) >= buffer_size {
+			// fmt.printf("Buffer full, packet dropped\n")
+			drop_packet(packet, true)
+			continue
+		}
+
 		queue.push_back(&send.dst.buffer, packet)
 	}
+}
+
+drop_packet :: proc(packet: Packet, drop_at_dst: bool = false) {
+	packet := packet
+	packet.anim = PacketAnimation.Dropped
+	if !drop_at_dst {
+		packet.velocity = Vec2{-35, 0}
+	}
+	packet.drop_at_dst = drop_at_dst
+	append(&exiting_packets, packet)
 }
 
 get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
@@ -290,6 +302,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			for i := 0; i < 10; i += 1 {
 				src_id := int(rand.int31()) % len(nodes)
 				dst_id := int(rand.int31()) % len(nodes)
+
+				if src_id == dst_id {
+					continue
+				}
 
 				if queue.len(nodes[src_id].buffer) >= buffer_size {
 					continue
@@ -351,25 +367,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// Draw node packets
 		for i := 0; i < queue.len(node.buffer); i += 1 {
 			packet := queue.get_ptr(&node.buffer, i)
-
-			src_pos := pos_in_buffer(packet.src_node, packet.src_bufid)
-			dst_pos := pos_in_buffer(packet.dst_node, packet.dst_bufid)
-			pos_t := clamp(0, 1, (t - last_tick_t) / TICK_ANIM_DURATION_S)
-			pos := math.lerp(src_pos, dst_pos, ease_in_out(pos_t))
-
-			size := packet_size_in_buffer
-			if packet.anim == PacketAnimation.New {
-				size_t := clamp(0, 1, (t - packet.created_t) / NEW_ANIM_DURATION_S)
-				size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
-			}
-
-			canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
-			packet.pos = pos
+			draw_packet_in_transit(packet)
 		}
 	}
 
 	// Draw exiting packets
-	for packet in exiting_packets {
+	for packet in &exiting_packets {
 		#partial switch packet.anim {
 		case .Delivered:
 			anim_t := clamp(0, 1, (t - last_tick_t) / DONE_ANIM_DURATION_S)
@@ -378,12 +381,47 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			alpha := math.lerp(f32(255), f32(0), ease_linear(anim_t, 0.9, 1))
 			canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, alpha)
 		case .Dropped:
-			anim_t := clamp(0, 1, (t - last_tick_t) / DROPPED_ANIM_DURATION_S)
-			pos := math.lerp(packet.pos, packet.pos + Vec2{0, 25}, ease_in(anim_t))
-			alpha := math.lerp(f32(255), f32(0), anim_t)
-			canvas_circle(pos.x, pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
+			if packet.drop_at_dst && (t - last_tick_t) < DROPPED_AT_DST_TIME_S {
+				draw_packet_in_transit(&packet)
+			} else {
+				if packet.velocity == (Vec2{0, 0}) {
+					packet.velocity = (packet.pos - packet.last_pos) / dt
+					packet.velocity = packet.velocity * -0.2 // bounce, lol
+				}
+				packet.velocity += Vec2{0, 180} * dt
+				packet.pos += packet.velocity * dt
+				anim_t := clamp(0, 1, (t - last_tick_t) / DROPPED_ANIM_DURATION_S)
+				alpha := math.lerp(f32(255), f32(0), anim_t)
+				canvas_circle(packet.pos.x, packet.pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
+			}
 		}
 	}
 
     return true
+}
+
+draw_packet_in_transit :: proc(packet: ^Packet) {
+	pos_t := clamp(0, 1, (t - last_tick_t) / TICK_ANIM_DURATION_S)
+			
+	src_pos := pos_in_buffer(packet.src_node, packet.src_bufid)
+	dst_pos := pos_in_buffer(packet.dst_node, packet.dst_bufid)
+	pos_direct := math.lerp(src_pos, dst_pos, ease_in_out(pos_t))
+
+	pos := pos_direct
+	size := packet_size_in_buffer
+
+	if packet.src_node != packet.dst_node {
+		pos_along_connection := math.lerp(packet.src_node.pos + Vec2{node_size/2, node_size/2}, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_out(pos_t))
+		pos = math.lerp(pos_direct, pos_along_connection, bounce_parabolic(pos_t) * 0.4)
+		size = math.lerp(packet_size_in_buffer, packet_size, bounce_parabolic(pos_t))
+	}
+
+	if packet.anim == PacketAnimation.New {
+		size_t := clamp(0, 1, (t - packet.created_t) / NEW_ANIM_DURATION_S)
+		size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
+	}
+
+	canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
+	packet.last_pos = packet.pos
+	packet.pos = pos
 }

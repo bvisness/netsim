@@ -4,7 +4,7 @@ import "core:container/queue"
 import "core:math"
 
 node_size: f32 : 50
-packet_size: f32 : 8
+packet_size: f32 : 6
 packet_size_in_buffer: f32 : 4
 packets_per_row: int : 5
 
@@ -41,6 +41,20 @@ buffer_rect :: proc(n: ^Node) -> Rect {
     }
 }
 
+trapezoid :: proc(t, s1, e1, s2, e2: f32) -> f32 {
+    if t <= s1 {
+        return 0
+    } else if t <= e1 {
+        return (t-s1) / (e1-s1)
+    } else if t <= s2 {
+        return 1
+    } else if t <= e2 {
+        return 1 - (t-s2) / (e2-s2)
+    } else {
+        return 0
+    }
+}
+
 ease_linear :: proc(t, start, end: f32) -> f32 {
     if t <= start {
         return 0
@@ -49,6 +63,10 @@ ease_linear :: proc(t, start, end: f32) -> f32 {
     } else {
         return (t-start) / (end-start)
     }
+}
+
+bounce_parabolic :: proc(t: f32) -> f32 {
+    return -4 * (t - 0.5) * (t - 0.5) + 1
 }
 
 ease_in :: proc(t: f32) -> f32 {
