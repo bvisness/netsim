@@ -310,8 +310,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     canvas_rect(0, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
 
 	// draw graph border
-	canvas_line(max_width + pad_size, 0, max_width + pad_size, max_height + pad_size + 1.5, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(0, max_height + pad_size, max_width + pad_size, max_height + pad_size, line_color.x, line_color.y, line_color.z, 255, 3)
+	canvas_line(max_width + pad_size, 0, max_width + pad_size, height, line_color.x, line_color.y, line_color.z, 255, 3)
 
 	menu_offset := max_width + (pad_size * 2)
 	text_height : f32 = 16
