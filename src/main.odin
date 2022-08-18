@@ -44,6 +44,7 @@ TICK_ANIM_DURATION_BASE :: 0.7
 NEW_ANIM_DURATION_BASE :: 0.3
 DONE_ANIM_DURATION_BASE :: 0.8
 DROPPED_ANIM_DURATION :: 1.2
+tones := []f32{ 392, 440, 493.88, 523.25, 587.33, 659.25, 739.99 }
 
 timescale: f32
 tick_interval: f32
@@ -452,6 +453,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					packet.velocity = packet.velocity * -0.2 // bounce, lol
 					packet.dropped_t = t
 					packet.initialized_drop_at_dst = true
+
+					idx := rand_int(0, len(tones) - 1)
+					play_tone(tones[idx])
 				}
 
 				packet.velocity += Vec2{0, 180} * dt
@@ -553,6 +557,7 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 
 remove_packets :: proc(packets: ^[dynamic]Packet, indexes: []int) {
 	for i := len(indexes)-1; i >= 0; i -= 1 {
+		
 		ordered_remove(packets, indexes[i])
 	}
 }

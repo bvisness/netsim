@@ -80,6 +80,7 @@
 		const canvasContainer = document.querySelector('.canvas-container');
 		const canvas = document.querySelector('canvas');
 		const ctx = canvas.getContext('2d');
+		const audio_ctx = new AudioContext();
 
 		let dpr;
 		let textHeight;
@@ -177,8 +178,24 @@
 					log_error(p, len) {
 						console.error(window.wasm.odinMem.loadString(p, len));
 					},
+					play_tone(freq) {
+						if (audio_ctx.state !== 'running') {
+							return;
+						}
+
+						let amp = audio_ctx.createGain();
+						let tone = new OscillatorNode(audio_ctx, {type: "sine", frequency: freq});
+						let end_time = 0.1;
+
+						tone.connect(amp).connect(audio_ctx.destination);
+						amp.gain.value = 0.05;
+						amp.gain.setTargetAtTime(0, audio_ctx.currentTime + (end_time / 2), 0.015);
+						tone.start(audio_ctx.currentTime);
+						tone.stop(audio_ctx.currentTime + end_time);
+					}
 				},
 			});
+
 
 			let awake = false;
 			function wakeUp() {
@@ -196,6 +213,10 @@
 				wakeUp();
 			});
 			window.addEventListener('mousedown', e => {
+				if (audio_ctx.state === 'suspended') {
+					audio_ctx.resume();
+				}
+
 				const containerRect = canvasContainer.getBoundingClientRect();
 				window.wasm.mouse_down(e.clientX - containerRect.x, e.clientY - containerRect.y);
 				wakeUp();
