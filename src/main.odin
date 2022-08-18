@@ -29,13 +29,26 @@ max_height  : f32 = 0
 pad_size    : f32 = 40
 buffer_size : int = 15
 running := true
-TIMESCALE :: 1
-TICK_INTERVAL_S :: 0.7 * TIMESCALE
-TICK_ANIM_DURATION_S :: 0.7 * TIMESCALE
-NEW_ANIM_DURATION_S :: 0.3 * TIMESCALE
-DONE_ANIM_DURATION_S :: 0.8 * TIMESCALE
-DROPPED_ANIM_DURATION_S :: 0.6 * TIMESCALE
-DROPPED_AT_DST_TIME_S :: 0.4 * TIMESCALE
+
+TICK_INTERVAL_BASE :: 0.7
+TICK_ANIM_DURATION_BASE :: 0.7
+NEW_ANIM_DURATION_BASE :: 0.3
+DONE_ANIM_DURATION_BASE :: 0.8
+DROPPED_ANIM_DURATION :: 1.2
+
+timescale: f32
+tick_interval: f32
+tick_anim_duration: f32
+new_anim_duration: f32
+done_anim_duration: f32
+
+set_timescale :: proc(new_timescale: f32) {
+	timescale = new_timescale
+	tick_interval = TICK_INTERVAL_BASE * timescale
+	tick_anim_duration = TICK_ANIM_DURATION_BASE * timescale
+	new_anim_duration = NEW_ANIM_DURATION_BASE * timescale
+	done_anim_duration = DONE_ANIM_DURATION_BASE * timescale
+}
 
 main :: proc() {
     arena_init(&global_arena, global_arena_data[:])
@@ -45,6 +58,8 @@ main :: proc() {
     wasmContext.temp_allocator = arena_allocator(&temp_arena)
 
     context = wasmContext
+
+	set_timescale(1)
 
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
@@ -221,7 +236,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     t += dt
 
-	if t - last_tick_t >= TICK_INTERVAL_S {
+	if t - last_tick_t >= tick_interval {
 		defer last_tick_t = t
 		defer tick_count += 1
 		
@@ -302,7 +317,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	for packet, i in &exiting_packets {
 		#partial switch packet.anim {
 		case .Delivered:
-			anim_t := (t - packet.delivered_t) / DONE_ANIM_DURATION_S
+			anim_t := (t - packet.delivered_t) / done_anim_duration
 			pos := math.lerp(packet.pos, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_back(anim_t))
 			size := math.lerp(packet_size_in_buffer, packet_size, ease_in(anim_t))
 			alpha := math.lerp(f32(255), f32(0), ease_linear(anim_t, 0.9, 1))
@@ -312,7 +327,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				append(&dead_packets, i)
 			}
 		case .Dropped:
-			pos_t := (t - packet.dropped_t) / TICK_ANIM_DURATION_S
+			pos_t := (t - packet.dropped_t) / tick_anim_duration
 			if packet.drop_at_dst && !packet.initialized_drop_at_dst && pos_t < 0.8 {
 				draw_packet_in_transit(&packet)
 			} else {
@@ -326,7 +341,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 				packet.velocity += Vec2{0, 180} * dt
 				packet.pos += packet.velocity * dt
-				anim_t := (t - packet.dropped_t) / DROPPED_ANIM_DURATION_S
+				anim_t := (t - packet.dropped_t) / DROPPED_ANIM_DURATION
 				alpha := math.lerp(f32(255), f32(0), anim_t)
 				canvas_circle(packet.pos.x, packet.pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
 
@@ -343,7 +358,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 }
 
 draw_packet_in_transit :: proc(packet: ^Packet) {
-	pos_t := clamp(0, 1, (t - last_tick_t) / TICK_ANIM_DURATION_S)
+	pos_t := clamp(0, 1, (t - last_tick_t) / tick_anim_duration)
 			
 	src_pos := pos_in_buffer(packet.src_node, packet.src_bufid)
 	dst_pos := pos_in_buffer(packet.dst_node, packet.dst_bufid)
@@ -359,7 +374,7 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 	}
 
 	if packet.anim == PacketAnimation.New {
-		size_t := clamp(0, 1, (t - packet.created_t) / NEW_ANIM_DURATION_S)
+		size_t := clamp(0, 1, (t - packet.created_t) / new_anim_duration)
 		size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
 	}
 
