@@ -1,6 +1,7 @@
 package main
 
 import "core:mem"
+import "core:runtime"
 
 @export
 mouse_move :: proc "contextless" (x, y: int) {}
@@ -30,6 +31,15 @@ blur :: proc "contextless" () {}
 temp_allocate :: proc(n: int) -> rawptr {
     context = wasmContext
     return mem.alloc(n, mem.DEFAULT_ALIGNMENT, context.temp_allocator)
+}
+
+// what a hilarious program LLVM is
+ordered_remove :: proc(array: ^$D/[dynamic]$T, index: int, loc := #caller_location) #no_bounds_check {
+	runtime.bounds_check_error_loc(loc, index, len(array))
+	for i := index+1; i < len(array); i += 1 {
+		array[i-1] = array[i]
+	}
+	(^runtime.Raw_Dynamic_Array)(array).len -= 1
 }
 
 foreign import "js"

@@ -1,5 +1,6 @@
 package main
 
+import "core:container/priority_queue"
 import "core:container/queue"
 import "core:fmt"
 import "core:intrinsics"
@@ -77,8 +78,12 @@ Packet :: struct {
 
 	created_t: f32, // when this transitioned to New
 
+	delivered_t: f32,
+
+	dropped_t: f32,
 	velocity: Vec2, // for dropping
 	drop_at_dst: bool,
+	initialized_drop_at_dst: bool,
 }
 
 PacketAnimation :: enum {
@@ -104,7 +109,7 @@ TIMESCALE :: 1
 TICK_INTERVAL_S :: 0.7 * TIMESCALE
 TICK_ANIM_DURATION_S :: 0.7 * TIMESCALE
 NEW_ANIM_DURATION_S :: 0.3 * TIMESCALE
-DONE_ANIM_DURATION_S :: 0.7 * TIMESCALE
+DONE_ANIM_DURATION_S :: 0.8 * TIMESCALE
 DROPPED_ANIM_DURATION_S :: 0.6 * TIMESCALE
 DROPPED_AT_DST_TIME_S :: 0.4 * TIMESCALE
 
@@ -156,9 +161,7 @@ main :: proc() {
 	max_height += node_size
 }
 
-tick :: proc() {
-	clear(&exiting_packets)
-
+tick :: proc() {	
 	PacketSend :: struct {
 		packet: Packet,
 		src: ^Node,
@@ -196,6 +199,7 @@ tick :: proc() {
 			// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
 			packet.anim = PacketAnimation.Delivered
 			packet.dst_node = &node
+			packet.delivered_t = t
 			append(&exiting_packets, packet)
 			continue
 		}
@@ -250,6 +254,7 @@ tick :: proc() {
 drop_packet :: proc(packet: Packet, drop_at_dst: bool = false) {
 	packet := packet
 	packet.anim = PacketAnimation.Dropped
+	packet.dropped_t = t
 	if !drop_at_dst {
 		packet.velocity = Vec2{-35, 0}
 	}
@@ -372,30 +377,46 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// Draw exiting packets
-	for packet in &exiting_packets {
+	dead_packets := make([dynamic]int, context.temp_allocator)
+	for packet, i in &exiting_packets {
 		#partial switch packet.anim {
 		case .Delivered:
-			anim_t := clamp(0, 1, (t - last_tick_t) / DONE_ANIM_DURATION_S)
+			anim_t := (t - packet.delivered_t) / DONE_ANIM_DURATION_S
 			pos := math.lerp(packet.pos, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_back(anim_t))
 			size := math.lerp(packet_size_in_buffer, packet_size, ease_in(anim_t))
 			alpha := math.lerp(f32(255), f32(0), ease_linear(anim_t, 0.9, 1))
 			canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, alpha)
+
+			if anim_t > 1 {
+				append(&dead_packets, i)
+			}
 		case .Dropped:
-			if packet.drop_at_dst && (t - last_tick_t) < DROPPED_AT_DST_TIME_S {
+			pos_t := (t - packet.dropped_t) / TICK_ANIM_DURATION_S
+			if packet.drop_at_dst && !packet.initialized_drop_at_dst && pos_t < 0.8 {
 				draw_packet_in_transit(&packet)
 			} else {
-				if packet.velocity == (Vec2{0, 0}) {
+				// initialize mid-stream drop animation
+				if packet.drop_at_dst && !packet.initialized_drop_at_dst {
 					packet.velocity = (packet.pos - packet.last_pos) / dt
 					packet.velocity = packet.velocity * -0.2 // bounce, lol
+					packet.dropped_t = t
+					packet.initialized_drop_at_dst = true
 				}
+
 				packet.velocity += Vec2{0, 180} * dt
 				packet.pos += packet.velocity * dt
-				anim_t := clamp(0, 1, (t - last_tick_t) / DROPPED_ANIM_DURATION_S)
+				anim_t := (t - packet.dropped_t) / DROPPED_ANIM_DURATION_S
 				alpha := math.lerp(f32(255), f32(0), anim_t)
 				canvas_circle(packet.pos.x, packet.pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
+
+				if anim_t > 1 {
+					append(&dead_packets, i)
+				}
 			}
 		}
 	}
+
+	remove_packets(&exiting_packets, dead_packets[:])
 
     return true
 }
@@ -424,4 +445,10 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 	canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
 	packet.last_pos = packet.pos
 	packet.pos = pos
+}
+
+remove_packets :: proc(packets: ^[dynamic]Packet, indexes: []int) {
+	for i := len(indexes)-1; i >= 0; i -= 1 {
+		ordered_remove(packets, indexes[i])
+	}
 }
