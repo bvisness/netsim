@@ -20,6 +20,8 @@ Node :: struct {
 	received: u64,
 	dropped: u64,
 
+	avg_tick_history: queue.Queue(u32),
+
 	buffer: queue.Queue(Packet),
 }
 
