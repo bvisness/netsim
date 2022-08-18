@@ -30,6 +30,23 @@ pad_size    : f32 = 40
 buffer_size : int = 15
 running := true
 
+// Dark mode
+dark_bg_color   := Vec3{15, 15, 15}
+dark_text_color := Vec3{255, 255, 255}
+dark_line_color := Vec3{120, 120, 120}
+dark_node_color := Vec3{180, 180, 180}
+
+// Light mode
+light_bg_color   := Vec3{250, 250, 250}
+light_text_color := Vec3{0, 0, 0}
+light_line_color := Vec3{200, 200, 200}
+light_node_color := Vec3{70, 70, 70}
+
+bg_color   := light_bg_color
+text_color := light_text_color
+line_color := light_line_color
+node_color := light_node_color
+
 TICK_INTERVAL_BASE :: 0.7
 TICK_ANIM_DURATION_BASE :: 0.7
 NEW_ANIM_DURATION_BASE :: 0.3
@@ -48,6 +65,21 @@ set_timescale :: proc(new_timescale: f32) {
 	tick_anim_duration = TICK_ANIM_DURATION_BASE * timescale
 	new_anim_duration = NEW_ANIM_DURATION_BASE * timescale
 	done_anim_duration = DONE_ANIM_DURATION_BASE * timescale
+}
+
+@export
+set_color_mode :: proc "contextless" (is_dark: bool) {
+	if is_dark {
+		bg_color   = dark_bg_color
+		text_color = dark_text_color
+		line_color = dark_line_color
+		node_color = dark_node_color
+	} else {
+		bg_color   = light_bg_color
+		text_color = light_text_color
+		line_color = light_line_color
+		node_color = light_node_color
+	}
 }
 
 main :: proc() {
@@ -85,8 +117,8 @@ main :: proc() {
 	for i := 0; i < len(nodes); i += 1 {
 		node := &nodes[i]
 
-		node.pos.x = (node.pos.x - min_width) + (pad_size * 2)
-		node.pos.y = (node.pos.y - min_height) + (pad_size * 2)
+		node.pos.x = (node.pos.x - min_width) + pad_size
+		node.pos.y = (node.pos.y - min_height) + pad_size
 
 		if node.pos.x > max_width {
 			max_width = node.pos.x
@@ -261,7 +293,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					dst_ip = nodes[dst_id].interfaces[0].ip,
 
 					// visualization
-					color = Vec3{f32(rand_int(100, 200)), f32(rand_int(100, 200)), f32(rand_int(100, 200))},
+					color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
 					src_node = &nodes[src_id],
 					dst_node = &nodes[src_id], // not a mistake!
 					src_bufid = queue.len(nodes[src_id].buffer),
@@ -273,17 +305,18 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
     canvas_clear()
+    canvas_rect(0, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
 
 	// render lines
 	for conn in conns {
 		node_a := nodes[conn.src_id.node_id]
 		node_b := nodes[conn.dst_id.node_id]
-		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), 180, 180, 180, 255, 3)
+		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), line_color.x, line_color.y, line_color.z, 255, 3)
 	}
 
 	// render nodes
 	for node in &nodes {
-    	canvas_rect(node.pos.x, node.pos.y, node_size, node_size, 5, 0, 0, 0, 255)
+    	canvas_rect(node.pos.x, node.pos.y, node_size, node_size, 5, node_color.x, node_color.y, node_color.z, 255)
 
 		// Draw interface IPs
 		// ip_pad : f32 = 5 
@@ -295,7 +328,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// }
 
 		// Draw label
-		canvas_text(node.name, node.pos.x, node.pos.y - 16, 0, 0, 0, 255)
+		canvas_text(node.name, node.pos.x, node.pos.y - 16, text_color.x, text_color.y, text_color.z, 255)
 
 		// Draw ???
 		// if queue.len(node.buffer) > 0 {

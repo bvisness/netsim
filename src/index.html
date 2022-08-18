@@ -303,6 +303,16 @@
 				wakeUp();
 			});
 
+			if (window.matchMedia) {
+				let is_dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+				window.wasm.set_color_mode(is_dark);
+
+				window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+					let is_dark = event.matches;
+					window.wasm.set_color_mode(is_dark);
+				})
+			}
+
 			function updateCanvasSize() {
 				dpr = window.devicePixelRatio;
 				canvas.width = canvasContainer.getBoundingClientRect().width * dpr;
