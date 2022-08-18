@@ -26,6 +26,7 @@ min_width   : f32 = 10000
 min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
+text_height : f32 = 16
 
 bg_color    := Vec3{}
 text_color  := Vec3{}
@@ -328,7 +329,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	canvas_line(max_width + pad_size, 0, max_width + pad_size, height, line_color.x, line_color.y, line_color.z, 255, 3)
 
 	menu_offset := max_width + (pad_size * 2)
-	text_height : f32 = 16
 
 	// This is cheaty, make this user driven
 	inspect_node := nodes[4]
@@ -361,49 +361,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
 	// render history graph
-	graph_size : f32 = 400
-	char_width : f32 = 6.35
-	header_str := "Average Packet Ticks Over Time"
-	center_offset := (graph_size / 2) - ((f32(len(header_str)) * char_width) / 2)
-	canvas_text(header_str, menu_offset + center_offset, pad_size + ((text_height + 4) * 7) + pad_size, text_color2.x, text_color2.y, text_color2.z, 255)
-
-	graph_top := pad_size + ((text_height + 4) * 8) + pad_size
-	canvas_line(menu_offset, graph_top, menu_offset + graph_size, graph_top, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(menu_offset, graph_top, menu_offset, graph_top + graph_size, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(menu_offset + graph_size, graph_top, menu_offset + graph_size, graph_top + graph_size, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(menu_offset, graph_top + graph_size, menu_offset + graph_size, graph_top + graph_size, line_color.x, line_color.y, line_color.z, 255, 3)
-
-	max_avg_ticks : u32 = 0
-	min_avg_ticks : u32 = 100000
-	for i := 0; i < queue.len(inspect_node.avg_tick_history); i += 1 {
-		entry := queue.get(&inspect_node.avg_tick_history, i)
-		max_avg_ticks = max(max_avg_ticks, entry)
-		min_avg_ticks = min(min_avg_ticks, entry)
-	}
-	max_range := max_avg_ticks - min_avg_ticks
-
-	graph_edge_pad : f32 = 15
-	graph_y_bounds := graph_size - (graph_edge_pad * 2)
-	graph_x_bounds := graph_size - graph_edge_pad
-
-	last_x : f32 = 0
-	last_y : f32 = 0
-	for i := 0; i < queue.len(inspect_node.avg_tick_history); i += 1 {
-		entry := queue.get(&inspect_node.avg_tick_history, i)
-
-		point_x_offset := f32(i) * (graph_x_bounds / f32(queue.len(inspect_node.avg_tick_history)))
-		point_y_offset := f32(entry - min_avg_ticks) * (graph_y_bounds / f32(max_range))
-
-		point_x := menu_offset + point_x_offset + (graph_edge_pad / 2)
-		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
-
-		if queue.len(inspect_node.avg_tick_history) > 1  && i > 0 {
-			canvas_line(last_x, last_y, point_x, point_y, text_color.x, text_color.y, text_color.z, 255, 2)
-		}
-
-		last_x = point_x
-		last_y = point_y
-	}
+	graph_top := ((text_height + 4) * 7) + (pad_size * 2)
+	draw_graph("Average Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset, graph_top, 400)
 
 	// render lines
 	for conn in conns {
@@ -510,6 +469,50 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 	canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
 	packet.last_pos = packet.pos
 	packet.pos = pos
+}
+
+draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
+	char_width : f32 = 6.35
+	center_offset := (size / 2) - ((f32(len(header)) * char_width) / 2)
+	canvas_text(header, x + center_offset, y, text_color2.x, text_color2.y, text_color2.z, 255)
+
+	graph_top := y + text_height + 4
+	canvas_line(x, graph_top, x + size, graph_top, line_color.x, line_color.y, line_color.z, 255, 3)
+	canvas_line(x, graph_top, x, graph_top + size, line_color.x, line_color.y, line_color.z, 255, 3)
+	canvas_line(x + size, graph_top, x + size, graph_top + size, line_color.x, line_color.y, line_color.z, 255, 3)
+	canvas_line(x, graph_top + size, x + size, graph_top + size, line_color.x, line_color.y, line_color.z, 255, 3)
+
+	max_val : u32 = 0
+	min_val : u32 = 100000
+	for i := 0; i < queue.len(history^); i += 1 {
+		entry := queue.get(history, i)
+		max_val = max(max_val, entry)
+		min_val = min(min_val, entry)
+	}
+	max_range := max_val - min_val
+
+	graph_edge_pad : f32 = 15
+	graph_y_bounds := size - (graph_edge_pad * 2)
+	graph_x_bounds := size - graph_edge_pad
+
+	last_x : f32 = 0
+	last_y : f32 = 0
+	for i := 0; i < queue.len(history^); i += 1 {
+		entry := queue.get(history, i)
+
+		point_x_offset := f32(i) * (graph_x_bounds / f32(queue.len(history^)))
+		point_y_offset := f32(entry - min_val) * (graph_y_bounds / f32(max_range))
+
+		point_x := x + point_x_offset + (graph_edge_pad / 2)
+		point_y := graph_top + size - point_y_offset - graph_edge_pad
+
+		if queue.len(history^) > 1  && i > 0 {
+			canvas_line(last_x, last_y, point_x, point_y, text_color.x, text_color.y, text_color.z, 255, 2)
+		}
+
+		last_x = point_x
+		last_y = point_y
+	}
 }
 
 remove_packets :: proc(packets: ^[dynamic]Packet, indexes: []int) {
