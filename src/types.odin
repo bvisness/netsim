@@ -107,7 +107,7 @@ PacketTcp :: struct  {
 	sequence_number: u32,
 	ack_number: u32,
 	control_flags: u16,
-	window_size: u16,
+	window: u16,
 }
 
 PacketAnimation :: enum {
@@ -134,7 +134,7 @@ TcpSession :: struct {
     // "you just have to track where you're at" -cloin
     send_unacknowledged: u32, // SND.UNA
     send_next: u32,	// SND.NXT
-    send_window: u32, // SND.WND
+    send_window: u16, // SND.WND
 	// no urgent pointers
 	last_window_update_seq_num: u32, // SND.WL1
 	last_window_update_ack_num: u32, // SND.WL2

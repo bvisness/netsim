@@ -1,9 +1,12 @@
 package main
 
 import "core:container/queue"
+import "core:fmt"
 
 COLOR_RST :: Vec3{220, 80, 80}
-COLOR_SYNACK :: Vec3{80, 80, 220}
+COLOR_SYN :: Vec3{80, 80, 220}
+COLOR_ACK :: Vec3{80, 220, 80}
+COLOR_SYNACK :: Vec3{80, 220, 220}
 
 handle_packet :: proc(n: ^Node, p: Packet) {
     #partial switch p.protocol {
@@ -178,7 +181,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 // TODO: Advance past any segments that need to be retried.
             }
 
-            if sess.send_unacknowledged > send.initial_send_seq_num {
+            if sess.send_unacknowledged > sess.initial_send_seq_num {
                 // The SYN we sent has been ACKed, plus we got a SYN in return.
                 // We can ACK back, and at this point we're established.
                 sess.state = TcpState.Established
@@ -237,7 +240,181 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // State-specific stuff will be handled as necessary.
 
         // Handle sequence numbers in all states.
-        
+
+        // Check if segment is acceptable (sequence number is somewhere in our
+        // window, if not in order). This has four cases because of zeroes.
+        acceptable: bool
+        if p.tcp.sequence_number == 0 && sess.receive_next == 0 {
+            acceptable = p.tcp.sequence_number == sess.receive_next
+        } else if p.tcp.sequence_number == 0 && sess.receive_next > 0 {
+            acceptable = sess.receive_next <= p.tcp.sequence_number && p.tcp.sequence_number < sess.receive_next + sess.receive_window // TODO(mod)
+        } else if p.tcp.sequence_number > 0 && sess.receive_next == 0 {
+            acceptable = false
+        } else if p.tcp.sequence_number > 0 && sess.receive_next > 0 {
+            segStart := p.tcp.sequence_number
+            segEnd := p.tcp.sequence_number + u32(len(p.data))
+            acceptable = (
+                sess.receive_next <= segStart && segStart < sess.receive_next + sess.receive_window || // TODO(mod)
+                sess.receive_next <= segEnd && segEnd < sess.receive_next + sess.receive_window) // TODO(mod)
+        } else {
+            fmt.println("ERROR! You messed up a case when checking for acceptable packets!")
+            trap()
+        }
+        if !acceptable {
+            // TODO: Still handle valid ACKs and RSTs.
+
+            if p.tcp.control_flags&TCP_RST != 0 {
+                return
+            }
+
+            // Send an ACK to try and let the other side know what we expect.
+            send_packet(n, Packet{
+                dst_ip = p.src_ip,
+                protocol = PacketProtocol.TCP,
+                tcp = PacketTcp{
+                    // This is a bog-standard ACK of our current state.
+                    sequence_number = sess.send_next,
+                    ack_number = sess.receive_next,
+                    control_flags = TCP_ACK,
+                },
+                color = COLOR_ACK,
+            })
+            return
+        }
+
+        // TODO: Actually queue up packets for good processing and handle sequence numbers!
+
+        // TODO: Handle the following in some way:
+        //
+        //  In the following it is assumed that the segment is the idealized
+        //  segment that begins at RCV.NXT and does not exceed the window. One
+        //  could tailor actual segments to fit this assumption by trimming off
+        //  any portions that lie outside the window (including SYN and FIN)
+        //  and only processing further if the segment then begins at RCV.NXT.
+        //  Segments with higher beginning sequence numbers SHOULD be held for
+        //  later processing (SHLD-31).
+        //
+
+        // Not doing the security check they mention for a reset attack.
+
+        // Handle a RST.
+        if p.tcp.control_flags&TCP_RST != 0 {
+            // There is some nuance in the spec about how to handle the various
+            // types of connection closes and resets. We don't care.
+            close_tcp_session(sess)
+            return
+        }
+
+        // Again, no security checks.
+
+        // Handle a SYN.
+        if p.tcp.control_flags&TCP_SYN != 0 {
+            if sess.state == TcpState.SynReceived {
+                // We're still handshaking, already received a SYN, and now we
+                // got another SYN. Just bail.
+                close_tcp_session(sess)
+                return
+            } else {
+                // Receiving a SYN while we are already synchronized could mean
+                // a bunch of different things. Per RFC 5691, we send an ACK.
+                //
+                // TODO: Handle TIME-WAIT in a special way per the spec.
+                send_packet(n, Packet{
+                    dst_ip = p.src_ip,
+                    protocol = PacketProtocol.TCP,
+                    tcp = PacketTcp{
+                        // This is a bog-standard ACK of our current state.
+                        sequence_number = sess.send_next,
+                        ack_number = sess.receive_next,
+                        control_flags = TCP_ACK,
+                    },
+                    color = COLOR_ACK,
+                })
+                return
+            }
+        }
+
+        // Ensure that any packets we process at this point have an ACK.
+        if p.tcp.control_flags&TCP_ACK == 0 {
+            return
+        }
+        // From here on out, we know we have ACK data.
+
+        // Ignoring the RFC 5691 blind data injection attack for now.
+
+        if sess.state == TcpState.SynReceived {
+            if sess.send_unacknowledged < p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
+                sess.state = TcpState.Established
+                sess.send_window = p.tcp.window
+                sess.last_window_update_seq_num = p.tcp.sequence_number
+                sess.last_window_update_ack_num = p.tcp.ack_number
+            } else {
+                // ACK outside the window while handshaking. Alas.
+                send_packet(n, Packet{
+                    dst_ip = p.src_ip,
+                    protocol = PacketProtocol.TCP,
+                    tcp = PacketTcp{
+                        sequence_number = p.tcp.ack_number,
+                        control_flags = TCP_RST,
+                    },
+                    color = COLOR_RST,
+                })
+            }
+        }
+
+        // To avoid confusing control flow, we define good ESTABLISHED
+        // packet processing as its own proc that we can call from all the
+        // other various states. If this returns false, abort processing.
+        process_established :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> bool {
+            // Update send window based on ACK from other side.
+            if sess.send_unacknowledged <= p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
+                window_moved_forward := sess.last_window_update_seq_num < p.tcp.sequence_number // TODO(mod)
+                ack_moved_forward := sess.last_window_update_seq_num == p.tcp.sequence_number && sess.last_window_update_ack_num <= p.tcp.ack_number // TODO(mod)
+                if window_moved_forward || ack_moved_forward {
+                    sess.send_window = p.tcp.window
+                    sess.last_window_update_seq_num = p.tcp.sequence_number
+                    sess.last_window_update_ack_num = p.tcp.ack_number
+                }
+            }
+
+            if p.tcp.ack_number <= sess.send_unacknowledged { // TODO(mod)
+                // This ACK is a duplicate and can be ignored.
+                return false
+            } else if sess.send_unacknowledged < p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
+                sess.send_unacknowledged = p.tcp.ack_number
+                // TODO: Clear acknowledged segments from the retransmission queue.
+            } else {
+                // ACK for something not yet sent. Ignore, and ACK back at them
+                // to try and sort things out.
+                send_packet(n, Packet{
+                    dst_ip = p.src_ip,
+                    protocol = PacketProtocol.TCP,
+                    tcp = PacketTcp{
+                        sequence_number = sess.send_next,
+                        ack_number = sess.receive_next,
+                        control_flags = TCP_ACK,
+                    },
+                    color = COLOR_ACK,
+                })
+                return false
+            }
+
+            return true
+        }
+
+        #partial switch sess.state {
+        case .Established:
+            if !process_established(n, sess, p) do return
+        // TODO: All the other states...
+        }
+
+        // Process the segment's data
+        fmt.println(p.data)
+        // TODO: Do better than this...
+
+        // TODO: FIN
+
+        // TODO: Timeouts (probably not here, but somewhere)
     }
 }
 
