@@ -21,6 +21,8 @@ nodes : [dynamic]Node
 conns : [dynamic]Connection
 exiting_packets : [dynamic]Packet
 
+nodes_by_name : map[string]^Node
+
 t: f32 = 0
 min_width   : f32 = 10000
 min_height  : f32 = 10000
@@ -107,6 +109,11 @@ main :: proc() {
 	if ok := load_config(net_config, &nodes, &conns); !ok {
 		fmt.printf("Failed to load config!\n")
 		trap()
+	}
+
+	nodes_by_name = make(map[string]^Node)
+	for n in &nodes {
+		nodes_by_name[n.name] = &n
 	}
 
 	// nasty padding adjustments ahoy
@@ -197,6 +204,8 @@ tick :: proc() {
 		}
 		if is_for_me {
 			// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
+
+			handle_packet(&node, packet)
 
 			packet.anim = PacketAnimation.Delivered
 			packet.dst_node = &node
@@ -350,33 +359,38 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		
 		tick()
 
-		if tick_count % 3 == 0 {
-		   for i := 0; i < 10; i += 1 {
-			   src_id := int(rand.int31()) % len(nodes)
-			   dst_id := int(rand.int31()) % len(nodes)
+		// Generate random packets, huzzah
+		// if tick_count % 3 == 0 {
+		// 	for i := 0; i < 10; i += 1 {
+		// 		generate_random_packet()
+		// 	}
+		// }
 
-			   if src_id == dst_id {
-				   continue
-			   }
+		if tick_count % 15 == 0 {
+			dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
+			if sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip); ok {
+				// HACK: Open up destination for listening
+				dst := nodes_by_name["discord_1"]
 
-			   if queue.len(nodes[src_id].buffer) >= buffer_size {
-				   continue
-			   }
+				iss := tcp_initial_sequence_num()
 
-			   queue.push_back(&nodes[src_id].buffer, Packet{
-				   anim = PacketAnimation.New,
-				   src_ip = nodes[src_id].interfaces[0].ip,
-				   dst_ip = nodes[dst_id].interfaces[0].ip,
+				hello_discord := Packet{
+					dst_ip = dst_ip,
+					protocol = PacketProtocol.TCP,
+					tcp = PacketTcp{
+						sequence_number = iss,
+						control_flags = TCP_SYN,
+					},
+					color = Vec3{220, 120, 220},
+				}
+				send_packet(nodes_by_name["me"], hello_discord)
 
-				   // visualization
-				   color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
-				   src_node = &nodes[src_id],
-				   dst_node = &nodes[src_id], // not a mistake!
-				   src_bufid = queue.len(nodes[src_id].buffer),
-				   dst_bufid = queue.len(nodes[src_id].buffer),
-				   created_t = t,
-			   })
-		   }
+				sess.initial_send_seq_num = iss
+				sess.send_unacknowledged = iss
+				sess.send_next = iss + 1
+
+				sess.state = TcpState.SynSent
+			}
 		}
 	}
 
@@ -533,6 +547,25 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     return true
 }
 
+generate_random_packet :: proc() {
+	src_id := int(rand.int31()) % len(nodes)
+	dst_id := int(rand.int31()) % len(nodes)
+
+	if src_id == dst_id {
+		return
+	}
+
+	if queue.len(nodes[src_id].buffer) >= buffer_size {
+		return
+	}
+
+	send_packet(&nodes[src_id], Packet{
+		src_ip = nodes[src_id].interfaces[0].ip,
+		dst_ip = nodes[dst_id].interfaces[0].ip,
+		color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
+	})
+}
+
 draw_packet_in_transit :: proc(packet: ^Packet) {
 	pos_t := clamp(0, 1, (t - last_tick_t) / tick_anim_duration)
 			
@@ -614,7 +647,6 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 
 remove_packets :: proc(packets: ^[dynamic]Packet, indexes: []int) {
 	for i := len(indexes)-1; i >= 0; i -= 1 {
-		
 		ordered_remove(packets, indexes[i])
 	}
 }
