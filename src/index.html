@@ -85,6 +85,7 @@
 
 		let dpr;
 		let textHeight;
+		let cached_font_size = -1;
 
 		async function init() {
 			window.wasm = await odin.runWasm('netsim.wasm', null, {
@@ -133,7 +134,11 @@
 					},
 					canvas_text(strP, strLen, x, y, r, g, b, a, size) {
 						const str = window.wasm.odinMem.loadString(strP, strLen);
-						ctx.font = `${14 * dpr * size}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
+						if (size !== cached_font_size) {
+							ctx.font = `${14 * dpr * size}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
+							cached_font_size = size;
+						}
+
 						ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
 						ctx.fillText(str, x * dpr, y * dpr);
 					},
