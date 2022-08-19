@@ -30,12 +30,13 @@ max_width   : f32 = 0
 max_height  : f32 = 0
 text_height : f32 = 16
 
-bg_color    := Vec3{}
-text_color  := Vec3{}
-text_color2 := Vec3{}
-line_color  := Vec3{}
-graph_color := Vec3{}
-node_color  := Vec3{}
+bg_color     := Vec3{}
+text_color   := Vec3{}
+text_color2  := Vec3{}
+button_color := Vec3{}
+line_color   := Vec3{}
+graph_color  := Vec3{}
+node_color   := Vec3{}
 
 scale        : f32 = 1
 last_mouse_pos := Vec2{}
@@ -76,19 +77,21 @@ set_timescale :: proc(new_timescale: f32) {
 @export
 set_color_mode :: proc "contextless" (is_dark: bool) {
 	if is_dark {
-		bg_color    = Vec3{15, 15, 15}
-		text_color  = Vec3{255, 255, 255}
-		text_color2 = Vec3{180, 180, 180}
-		line_color  = Vec3{120, 120, 120}
-		node_color  = Vec3{180, 180, 180}
-		graph_color = Vec3{180, 180, 180}
+		bg_color     = Vec3{15, 15, 15}
+		text_color   = Vec3{255, 255, 255}
+		text_color2  = Vec3{180, 180, 180}
+		button_color = Vec3{40, 40, 40}
+		line_color   = Vec3{120, 120, 120}
+		node_color   = Vec3{180, 180, 180}
+		graph_color  = Vec3{180, 180, 180}
 	} else {
-		bg_color    = Vec3{254, 252, 248}
-		text_color  = Vec3{0, 0, 0}
-		text_color2 = Vec3{80, 80, 80}
-		line_color  = Vec3{219, 211, 205}
-		node_color  = Vec3{129, 100, 80}
-		graph_color = Vec3{69, 49, 34}
+		bg_color     = Vec3{254, 252, 248}
+		text_color   = Vec3{0, 0, 0}
+		text_color2  = Vec3{80, 80, 80}
+		button_color = Vec3{200, 200, 200}
+		line_color   = Vec3{219, 211, 205}
+		node_color   = Vec3{129, 100, 80}
+		graph_color  = Vec3{69, 49, 34}
 	}
 }
 
@@ -347,7 +350,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// compute pan
 	pan_velocity := Vec2{}
-	if clicked {
+	if is_mouse_down {
 		if mouse_pos.x < width || mouse_pos.x > 0 {
 			pan_velocity.x = mouse_pos.x - last_mouse_pos.x
 		}
@@ -356,7 +359,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 		last_mouse_pos = mouse_pos
 	}
-	pan += 50 * pan_velocity * dt
+	pan += pan_velocity
 
 	if running && t - last_tick_t >= tick_interval {
 		defer last_tick_t = t
@@ -419,7 +422,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
     canvas_clear()
-    canvas_rect(0, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
+    draw_rect(rect(0, 0, width, height), 0, bg_color)
 
 	// Render graph view
 
@@ -503,34 +506,40 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// Render menu view
-    canvas_rect(max_width + pad_size, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
+    draw_rect(rect(max_width + pad_size, 0, width, height), 0, bg_color)
 
 	// draw menu border
-	canvas_line(max_width + pad_size, 0, max_width + pad_size, height, line_color.x, line_color.y, line_color.z, 255, 3)
+	draw_line(Vec2{max_width + pad_size, 0}, Vec2{max_width + pad_size, height}, 3, line_color)
 
 	menu_offset := max_width + (pad_size * 2)
 
 	// check intersections
-	if clicked {
-		for node, idx in &nodes {
-			if pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
-				node_selected = idx
-				break
-			}
+	for node, idx in &nodes {
+		if clicked && pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
+			node_selected = idx
+			break
 		}
 	}
 
 	if node_selected != -1 {
 		inspect_node := nodes[node_selected]
 
-		canvas_text("Node Inspector", menu_offset, pad_size, text_color.x, text_color.y, text_color.z, 255)
-		canvas_text(fmt.tprintf("Name: %s", inspect_node.name), menu_offset, pad_size + text_height + 4, text_color2.x, text_color2.y, text_color2.z, 255)
-		canvas_text(fmt.tprintf("Sent: %d", inspect_node.sent), menu_offset, pad_size + ((text_height + 4) * 2), text_color2.x, text_color2.y, text_color2.z, 255)
-		canvas_text(fmt.tprintf("Received: %d", inspect_node.received), menu_offset, pad_size + ((text_height + 4) * 3), text_color2.x, text_color2.y, text_color2.z, 255)
-		canvas_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), menu_offset, pad_size + ((text_height + 4) * 4), text_color2.x, text_color2.y, text_color2.z, 255)
+		y: f32 = 0
+		next_line := proc(y: ^f32) -> f32 {
+			res := y^
+			y^ += text_height + 4
+			return res
+		}
+
+		y = pad_size
+		draw_text("Node Inspector", Vec2{menu_offset, next_line(&y)}, 1, text_color)
+		draw_text(fmt.tprintf("Name: %s", inspect_node.name), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		draw_text(fmt.tprintf("Sent: %d", inspect_node.sent), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		draw_text(fmt.tprintf("Received: %d", inspect_node.received), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		draw_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
 
 		buffer_used := min(buffer_size, queue.len(inspect_node.buffer))
-		canvas_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), menu_offset, pad_size + ((text_height + 4) * 5), text_color2.x, text_color2.y, text_color2.z, 255)
+		draw_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
 
 		average_packet_ticks : u32 = 0
 		average_packet_ttl   : u32 = 0
@@ -546,9 +555,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			average_packet_ttl /= u32(node_packet_count)
 		}
 
-		canvas_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), menu_offset, pad_size + ((text_height + 4) * 6), text_color2.x, text_color2.y, text_color2.z, 255)
-		canvas_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), menu_offset, pad_size + ((text_height + 4) * 7), text_color2.x, text_color2.y, text_color2.z, 255)
-
+		draw_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		draw_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
 
 		// render history graph
 		graph_top := ((text_height + 4) * 7) + (pad_size * 2)
@@ -562,55 +570,49 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// render logs and debug info
 		{
 			logs_left: f32 = menu_offset + 500
-			logs_top: f32 = 50
-			y := logs_top
-			next_line := proc(y: ^f32) -> f32 {
-				res := y^
-				y^ += 20
-				return res
-			}
 
-			canvas_text("Connections:", logs_left, next_line(&y), 0, 0, 0, 255)
+			y = 50
+			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, text_color)
 			for sess in inspect_node.tcp_sessions {
 				if sess.ip == 0 {
 					continue
 				}
-				canvas_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  State: %v", sess.state), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  SND.UNA: %v", sess.send_unacknowledged), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  SND.NXT: %v", sess.send_next), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  SND.WND: %v", sess.send_window), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  ISS: %v", sess.initial_send_seq_num), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  RCV.NXT: %v", sess.receive_next), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  RCV.WND: %v", sess.receive_window), logs_left, next_line(&y), 0, 0, 0, 255)
-				canvas_text(fmt.tprintf("  IRS: %v", sess.initial_receive_seq_num), logs_left, next_line(&y), 0, 0, 0, 255)
+				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  State: %v", sess.state), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  SND.UNA: %v", sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  SND.NXT: %v", sess.send_next), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  SND.WND: %v", sess.send_window), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  ISS: %v", sess.initial_send_seq_num), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  RCV.NXT: %v", sess.receive_next), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  RCV.WND: %v", sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("  IRS: %v", sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, text_color)
 			}
 
 			next_line(&y)
 
 			log_lines := 50
-			canvas_text("Logs:", logs_left, next_line(&y), 0, 0, 0, 255)
+			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, text_color)
 			if len(inspect_node.logs) > log_lines {
-				canvas_text("...", logs_left, next_line(&y), 0, 0, 0, 255)
+				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, text_color)
 			}
 			for msg in inspect_node.logs[max(0, len(inspect_node.logs)-log_lines):] {
-				canvas_text(msg, logs_left, next_line(&y), 0, 0, 0, 255)
+				draw_text(msg, Vec2{logs_left, next_line(&y)}, 1, text_color)
 			}
 		}
 	}
 
-	canvas_circle(20 + packet_size, 20+packet_size+20*0, packet_size, COLOR_SYN.x, COLOR_SYN.y, COLOR_SYN.z, 255)
-	canvas_circle(20 + packet_size, 20+packet_size+20*1, packet_size, COLOR_ACK.x, COLOR_ACK.y, COLOR_ACK.z, 255)
-	canvas_circle(20 + packet_size, 20+packet_size+20*2, packet_size, COLOR_SYNACK.x, COLOR_SYNACK.y, COLOR_SYNACK.z, 255)
-	canvas_circle(20 + packet_size, 20+packet_size+20*3, packet_size, COLOR_RST.x, COLOR_RST.y, COLOR_RST.z, 255)
-	canvas_text("SYN",    38, 20+20*0, 0, 0, 0, 255)
-	canvas_text("ACK",    38, 20+20*1, 0, 0, 0, 255)
-	canvas_text("SYNACK", 38, 20+20*2, 0, 0, 0, 255)
-	canvas_text("RST",    38, 20+20*3, 0, 0, 0, 255)
+	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*0}, packet_size, COLOR_SYN)
+	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*1}, packet_size, COLOR_ACK)
+	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*2}, packet_size, COLOR_SYNACK)
+	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*3}, packet_size, COLOR_RST)
+	draw_text("SYN",    Vec2{38, 20+20*0}, 1, text_color)
+	draw_text("ACK",    Vec2{38, 20+20*1}, 1, text_color)
+	draw_text("SYNACK", Vec2{38, 20+20*2}, 1, text_color)
+	draw_text("RST",    Vec2{38, 20+20*3}, 1, text_color)
 
 	stop_start_rect := Rect{Vec2{20, 100}, Vec2{100, 30}}
-	canvas_rect(stop_start_rect.pos.x, stop_start_rect.pos.y, stop_start_rect.size.x, stop_start_rect.size.y, 2, 240, 240, 240, 255)
-	canvas_text(running ? "STOP" : "START", stop_start_rect.pos.x + 10, stop_start_rect.pos.y + 10, 0, 0, 0, 255)
+	draw_rect(stop_start_rect, 2, button_color)
+	draw_text(running ? "STOP" : "START", stop_start_rect.pos + Vec2{10, 10}, 1, text_color)
 	if clicked && pt_in_rect(mouse_pos, stop_start_rect) {
 		running = !running
 	}
@@ -670,13 +672,13 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	line_width : f32 = 1
 
 	center_offset := (size / 2) - ((f32(len(header)) * char_width) / 2)
-	canvas_text(header, x + center_offset, y, text_color2.x, text_color2.y, text_color2.z, 255)
+	draw_text(header, Vec2{x + center_offset, y}, 1, text_color2)
 
 	graph_top := y + text_height + 4
-	canvas_line(x, graph_top, x + size, graph_top, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(x, graph_top, x, graph_top + size, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(x + size, graph_top, x + size, graph_top + size, line_color.x, line_color.y, line_color.z, 255, 3)
-	canvas_line(x, graph_top + size, x + size, graph_top + size, line_color.x, line_color.y, line_color.z, 255, 3)
+	draw_line(Vec2{x, graph_top}, Vec2{x + size, graph_top}, 3, line_color)
+	draw_line(Vec2{x, graph_top}, Vec2{x, graph_top + size}, 3, line_color)
+	draw_line(Vec2{x + size, graph_top}, Vec2{x + size, graph_top + size}, 3, line_color)
+	draw_line(Vec2{x, graph_top + size}, Vec2{x + size, graph_top + size}, 3, line_color)
 
 	max_val : u32 = 0
 	min_val : u32 = 100000

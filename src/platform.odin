@@ -62,7 +62,7 @@ foreign js {
     canvas_clip :: proc(x, y, w, h: f32) ---
     canvas_rect :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
     canvas_circle :: proc(x, y, radius: f32, r, g, b, a: f32) ---
-    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale : f32 = 1) ---
+    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale: f32) ---
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
     canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     measure_text :: proc(str: string) -> f32 ---
@@ -71,4 +71,20 @@ foreign js {
     debugger :: proc() ---
     log_string :: proc(str: string) ---
     log_error :: proc(str: string) ---
+}
+
+draw_rect :: proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
+    canvas_rect(rect.pos.x, rect.pos.y, rect.size.x, rect.size.y, radius, color.x, color.y, color.z, a)
+}
+draw_circle :: proc(center: Vec2, radius: f32, color: Vec3, a: f32 = 255) {
+    canvas_circle(center.x, center.y, radius, color.x, color.y, color.z, a)
+}
+draw_text :: proc(str: string, pos: Vec2, scale: f32, color: Vec3, a: f32 = 255) {
+    canvas_text(str, pos.x, pos.y, color.x, color.y, color.z, a, scale)
+}
+draw_line :: proc(start, end: Vec2, strokeWidth: f32, color: Vec3, a: f32 = 255) {
+    canvas_line(start.x, start.y, end.x, end.y, color.x, color.y, color.z, a, strokeWidth)
+}
+draw_arc :: proc(center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f32, color: Vec3, a: f32, ) {
+    canvas_arc(center.x, center.y, radius, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth)
 }

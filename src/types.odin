@@ -215,3 +215,7 @@ control_flag_str :: proc(f: u16) -> string {
 		return "???"
 	}
 }
+
+rect :: proc(x, y, w, h: f32) -> Rect {
+	return Rect{Vec2{x, y}, Vec2{w, h}}
+}
