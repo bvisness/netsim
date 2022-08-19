@@ -4,16 +4,27 @@ import "core:mem"
 import "core:runtime"
 
 @export
-mouse_move :: proc "contextless" (x, y: int) {}
+mouse_move :: proc "contextless" (x, y: int) {
+	last_mouse_pos = mouse_pos
+	mouse_pos = Vec2{f32(x), f32(y)}
+}
 
 @export
-mouse_down :: proc "contextless" (x, y: int) {}
+mouse_down :: proc "contextless" (x, y: int) {
+	clicked = true
+	mouse_pos = Vec2{f32(x), f32(y)}
+}
 
 @export
-mouse_up :: proc "contextless" (x, y: int) {}
+mouse_up :: proc "contextless" (x, y: int) {
+	clicked = false
+	mouse_pos = Vec2{f32(x), f32(y)}
+}
 
 @export
-scroll :: proc "contextless" (x, y: int) {}
+scroll :: proc "contextless" (x, y: int) {
+	scroll_velocity = f32(y)
+}
 
 @export
 key_down :: proc "contextless" (key: int) {}
@@ -49,7 +60,7 @@ foreign js {
     canvas_clip :: proc(x, y, w, h: f32) ---
     canvas_rect :: proc(x, y, w, h, radius: f32, r, g, b, a: f32) ---
     canvas_circle :: proc(x, y, radius: f32, r, g, b, a: f32) ---
-    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32) ---
+    canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale : f32 = 1) ---
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
     canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     measure_text :: proc(str: string) -> f32 ---

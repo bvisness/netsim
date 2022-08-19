@@ -34,9 +34,16 @@ text_color2 := Vec3{}
 line_color  := Vec3{}
 node_color  := Vec3{}
 
+scale        : f32 = 1
+last_mouse_pos := Vec2{}
+mouse_pos      := Vec2{}
+pan            := Vec2{}
+scroll_velocity: f32 = 0
+clicked := false
+
 pad_size     : f32 = 40
 buffer_size  : int = 15
-history_size : int = 100
+history_size : int = 50
 running := true
 
 TICK_INTERVAL_BASE :: 0.7
@@ -200,8 +207,6 @@ tick :: proc() {
 			if masked_dest == rule.ip {
 				if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
 
-					node.sent += 1
-					dst_node.received += 1
 					packet.ttl += 1
 					append(&packet_sends, PacketSend{
 						packet = packet,
@@ -242,6 +247,8 @@ tick :: proc() {
 			continue
 		}
 
+		send.src.sent += 1
+		send.dst.received += 1
 		queue.push_back(&send.dst.buffer, packet)
 	}
 
@@ -309,6 +316,28 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     t += dt
 
+	// compute scroll
+	scale += 0.05 * scroll_velocity * dt
+	if scale < 0.1 {
+		scale = 0.1
+	} else if scale > 1.5 {
+		scale = 1.5
+	}
+	scroll_velocity = 0
+
+	// compute pan
+	pan_velocity := Vec2{}
+	if clicked {
+		if mouse_pos.x < width || mouse_pos.x > 0 {
+			pan_velocity.x = mouse_pos.x - last_mouse_pos.x
+		}
+		if mouse_pos.y < height || mouse_pos.y > 0 {
+			pan_velocity.y = mouse_pos.y - last_mouse_pos.y
+		}
+		last_mouse_pos = mouse_pos
+	}
+	pan += 50 * pan_velocity * dt
+
 	if t - last_tick_t >= tick_interval {
 		defer last_tick_t = t
 		defer tick_count += 1
@@ -316,37 +345,121 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		tick()
 
 		if tick_count % 3 == 0 {
-			for i := 0; i < 10; i += 1 {
-				src_id := int(rand.int31()) % len(nodes)
-				dst_id := int(rand.int31()) % len(nodes)
+		   for i := 0; i < 10; i += 1 {
+			   src_id := int(rand.int31()) % len(nodes)
+			   dst_id := int(rand.int31()) % len(nodes)
 
-				if src_id == dst_id {
-					continue
-				}
+			   if src_id == dst_id {
+				   continue
+			   }
 
-				if queue.len(nodes[src_id].buffer) >= buffer_size {
-					continue
-				}
+			   if queue.len(nodes[src_id].buffer) >= buffer_size {
+				   continue
+			   }
 
-				queue.push_back(&nodes[src_id].buffer, Packet{
-					anim = PacketAnimation.New,
-					src_ip = nodes[src_id].interfaces[0].ip,
-					dst_ip = nodes[dst_id].interfaces[0].ip,
+			   queue.push_back(&nodes[src_id].buffer, Packet{
+				   anim = PacketAnimation.New,
+				   src_ip = nodes[src_id].interfaces[0].ip,
+				   dst_ip = nodes[dst_id].interfaces[0].ip,
 
-					// visualization
-					color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
-					src_node = &nodes[src_id],
-					dst_node = &nodes[src_id], // not a mistake!
-					src_bufid = queue.len(nodes[src_id].buffer),
-					dst_bufid = queue.len(nodes[src_id].buffer),
-					created_t = t,
-				})
-			}
+				   // visualization
+				   color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
+				   src_node = &nodes[src_id],
+				   dst_node = &nodes[src_id], // not a mistake!
+				   src_bufid = queue.len(nodes[src_id].buffer),
+				   dst_bufid = queue.len(nodes[src_id].buffer),
+				   created_t = t,
+			   })
+		   }
 		}
 	}
 
     canvas_clear()
     canvas_rect(0, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
+
+	// Render graph view
+
+	// render lines
+	for conn in conns {
+		node_a := nodes[conn.src_id.node_id]
+		node_b := nodes[conn.dst_id.node_id]
+		scaled_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), line_color.x, line_color.y, line_color.z, 255, 3)
+	}
+
+	// render nodes
+	for node in &nodes {
+    	scaled_rect(node.pos.x, node.pos.y, node_size, node_size, 5, node_color.x, node_color.y, node_color.z, 255)
+
+		// Draw interface IPs
+		// ip_pad : f32 = 5 
+		// ip_offset : f32 = 16
+		// for interface, i in node.interfaces {
+		// 	scaled_text(ip_to_str(interface.ip), node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
+		// }
+
+		// Draw label
+		scaled_text(node.name, node.pos.x, node.pos.y - 16, text_color.x, text_color.y, text_color.z, 255)
+
+		// Draw ???
+		// if queue.len(node.buffer) > 0 {
+		// 	pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
+		// 	color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
+
+		// 	scaled_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
+		// }
+
+		// Draw node packets
+		for i := 0; i < queue.len(node.buffer); i += 1 {
+			packet := queue.get_ptr(&node.buffer, i)
+			draw_packet_in_transit(packet)
+		}
+	}
+
+	// Draw exiting packets
+	dead_packets := make([dynamic]int, context.temp_allocator)
+	for packet, i in &exiting_packets {
+		#partial switch packet.anim {
+		case .Delivered:
+			anim_t := (t - packet.delivered_t) / done_anim_duration
+			pos := math.lerp(packet.pos, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_back(anim_t))
+			size := math.lerp(packet_size_in_buffer, packet_size, ease_in(anim_t))
+			alpha := math.lerp(f32(255), f32(0), ease_linear(anim_t, 0.9, 1))
+			scaled_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, alpha)
+
+			if anim_t > 1 {
+				append(&dead_packets, i)
+			}
+		case .Dropped:
+			pos_t := (t - packet.dropped_t) / tick_anim_duration
+			if packet.drop_at_dst && !packet.initialized_drop_at_dst && pos_t < 0.8 {
+				draw_packet_in_transit(&packet)
+			} else {
+				// initialize mid-stream drop animation
+				if packet.drop_at_dst && !packet.initialized_drop_at_dst {
+					packet.velocity = (packet.pos - packet.last_pos) / dt
+					packet.velocity = packet.velocity * -0.2 // bounce, lol
+					packet.dropped_t = t
+					packet.initialized_drop_at_dst = true
+
+					idx := rand_int(0, len(tones) - 1)
+					play_tone(tones[idx])
+				}
+
+				packet.velocity += Vec2{0, 180} * dt
+				packet.pos += packet.velocity * dt
+				anim_t := (t - packet.dropped_t) / DROPPED_ANIM_DURATION
+				alpha := math.lerp(f32(255), f32(0), anim_t)
+				scaled_circle(packet.pos.x, packet.pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
+
+				if anim_t > 1 {
+					append(&dead_packets, i)
+				}
+			}
+		}
+	}
+
+	// Render menu view
+    canvas_rect(max_width + pad_size, 0, width, height, 0, bg_color.x, bg_color.y, bg_color.z, 255)
 
 	// draw menu border
 	canvas_line(max_width + pad_size, 0, max_width + pad_size, height, line_color.x, line_color.y, line_color.z, 255, 3)
@@ -392,85 +505,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
 	draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
 
-	// render lines
-	for conn in conns {
-		node_a := nodes[conn.src_id.node_id]
-		node_b := nodes[conn.dst_id.node_id]
-		canvas_line(node_a.pos.x + (node_size / 2), node_a.pos.y + (node_size / 2), node_b.pos.x + (node_size / 2), node_b.pos.y + (node_size / 2), line_color.x, line_color.y, line_color.z, 255, 3)
-	}
-
-	// render nodes
-	for node in &nodes {
-    	canvas_rect(node.pos.x, node.pos.y, node_size, node_size, 5, node_color.x, node_color.y, node_color.z, 255)
-
-		// Draw interface IPs
-		// ip_pad : f32 = 5 
-		// ip_offset : f32 = 16
-		// for interface, i in node.interfaces {
-		// 	canvas_text(ip_to_str(interface.ip), node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
-		// }
-
-		// Draw label
-		canvas_text(node.name, node.pos.x, node.pos.y - 16, text_color.x, text_color.y, text_color.z, 255)
-
-		// Draw ???
-		// if queue.len(node.buffer) > 0 {
-		// 	pos := Vec2{node.pos.x + ((node_size / 2) - (packet_size / 2)), node.pos.y + ((node_size / 2) - (packet_size / 2))}
-		// 	color : f32 = ((-math.cos_f32(t) + 1) / 2) * 255
-
-		// 	canvas_rect(pos.x, pos.y, packet_size, packet_size, packet_size / 2, int(color), 100, 100, 255)
-		// }
-
-		// Draw node packets
-		for i := 0; i < queue.len(node.buffer); i += 1 {
-			packet := queue.get_ptr(&node.buffer, i)
-			draw_packet_in_transit(packet)
-		}
-	}
-
-	// Draw exiting packets
-	dead_packets := make([dynamic]int, context.temp_allocator)
-	for packet, i in &exiting_packets {
-		#partial switch packet.anim {
-		case .Delivered:
-			anim_t := (t - packet.delivered_t) / done_anim_duration
-			pos := math.lerp(packet.pos, packet.dst_node.pos + Vec2{node_size/2, node_size/2}, ease_in_back(anim_t))
-			size := math.lerp(packet_size_in_buffer, packet_size, ease_in(anim_t))
-			alpha := math.lerp(f32(255), f32(0), ease_linear(anim_t, 0.9, 1))
-			canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, alpha)
-
-			if anim_t > 1 {
-				append(&dead_packets, i)
-			}
-		case .Dropped:
-			pos_t := (t - packet.dropped_t) / tick_anim_duration
-			if packet.drop_at_dst && !packet.initialized_drop_at_dst && pos_t < 0.8 {
-				draw_packet_in_transit(&packet)
-			} else {
-				// initialize mid-stream drop animation
-				if packet.drop_at_dst && !packet.initialized_drop_at_dst {
-					packet.velocity = (packet.pos - packet.last_pos) / dt
-					packet.velocity = packet.velocity * -0.2 // bounce, lol
-					packet.dropped_t = t
-					packet.initialized_drop_at_dst = true
-
-					idx := rand_int(0, len(tones) - 1)
-					play_tone(tones[idx])
-				}
-
-				packet.velocity += Vec2{0, 180} * dt
-				packet.pos += packet.velocity * dt
-				anim_t := (t - packet.dropped_t) / DROPPED_ANIM_DURATION
-				alpha := math.lerp(f32(255), f32(0), anim_t)
-				canvas_circle(packet.pos.x, packet.pos.y, packet_size_in_buffer, packet.color.x, packet.color.y, packet.color.z, alpha)
-
-				if anim_t > 1 {
-					append(&dead_packets, i)
-				}
-			}
-		}
-	}
-
 	remove_packets(&exiting_packets, dead_packets[:])
 
     return true
@@ -497,7 +531,7 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 		size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
 	}
 
-	canvas_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
+	scaled_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
 	packet.last_pos = packet.pos
 	packet.pos = pos
 }

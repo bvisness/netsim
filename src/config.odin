@@ -102,7 +102,11 @@ net_config := `
 			"name": "google",
 			"pos": { "x": 400, "y": 200 },
 			"interfaces": [ "3.3.3.1", "3.3.3.2" ],
-			"rules": []
+			"rules": [
+				{ "ip": "2.0.0.0", "subnet": "255.0.0.0", "interface": 0 },
+				{ "ip": "4.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
+				{ "ip": "0.0.0.0", "subnet": "0.0.0.0",   "interface": 1 }
+			]
 		},
 		{
 			"name": "cloudflare",

@@ -15,6 +15,7 @@
 
 		body {
 			font-family: -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol;
+
 		}
 
 		.canvas-container {
@@ -130,8 +131,9 @@
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
 						ctx.fill();
 					},
-					canvas_text(strP, strLen, x, y, r, g, b, a) {
+					canvas_text(strP, strLen, x, y, r, g, b, a, size) {
 						const str = window.wasm.odinMem.loadString(strP, strLen);
+						ctx.font = `${14 * dpr * size}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
 						ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
 						ctx.fillText(str, x * dpr, y * dpr);
 					},
@@ -306,7 +308,8 @@
 				window.wasm.text_input();
 				wakeUp();
 			});
-			window.addEventListener('wheel', e => {
+			canvas.addEventListener('wheel', e => {
+				e.preventDefault();
 				let x = e.deltaX;
 				let y = e.deltaY;
 
