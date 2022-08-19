@@ -12,12 +12,14 @@ mouse_move :: proc "contextless" (x, y: int) {
 @export
 mouse_down :: proc "contextless" (x, y: int) {
 	clicked = true
+	last_mouse_pos = mouse_pos
 	mouse_pos = Vec2{f32(x), f32(y)}
 }
 
 @export
 mouse_up :: proc "contextless" (x, y: int) {
 	clicked = false
+	last_mouse_pos = mouse_pos
 	mouse_pos = Vec2{f32(x), f32(y)}
 }
 

@@ -32,6 +32,7 @@ bg_color    := Vec3{}
 text_color  := Vec3{}
 text_color2 := Vec3{}
 line_color  := Vec3{}
+graph_color := Vec3{}
 node_color  := Vec3{}
 
 scale        : f32 = 1
@@ -77,12 +78,14 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		text_color2 = Vec3{180, 180, 180}
 		line_color  = Vec3{120, 120, 120}
 		node_color  = Vec3{180, 180, 180}
+		graph_color = Vec3{180, 180, 180}
 	} else {
-		bg_color    = Vec3{250, 250, 250}
+		bg_color    = Vec3{254, 252, 248}
 		text_color  = Vec3{0, 0, 0}
 		text_color2 = Vec3{80, 80, 80}
-		line_color  = Vec3{200, 200, 200}
-		node_color  = Vec3{70, 70, 70}
+		line_color  = Vec3{219, 211, 205}
+		node_color  = Vec3{129, 100, 80}
+		graph_color = Vec3{69, 49, 34}
 	}
 }
 
@@ -601,7 +604,7 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 		point_y := graph_top + size - point_y_offset - graph_edge_pad
 
 		if queue.len(history^) > 1  && i > 0 {
-			canvas_line(last_x, last_y, point_x, point_y, text_color.x, text_color.y, text_color.z, 255, line_width)
+			canvas_line(last_x, last_y, point_x, point_y, graph_color.x, graph_color.y, graph_color.z, 255, line_width)
 		}
 
 		last_x = point_x

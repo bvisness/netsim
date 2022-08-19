@@ -220,6 +220,10 @@
 				wakeUp();
 			});
 			window.addEventListener('mousedown', e => {
+				if (e.button != 0) {
+					return;
+				}
+
 				if (audio_ctx.state === 'suspended') {
 					audio_ctx.resume();
 				}
