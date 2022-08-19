@@ -87,6 +87,13 @@
 		let textHeight;
 		let cached_font_size = -1;
 
+		function updateFontSize(size) {
+			if (size !== cached_font_size) {
+				ctx.font = `${14 * dpr * size}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
+				cached_font_size = size;
+			}
+		}
+
 		async function init() {
 			window.wasm = await odin.runWasm('netsim.wasm', null, {
 				js: {
@@ -134,10 +141,7 @@
 					},
 					canvas_text(strP, strLen, x, y, r, g, b, a, size) {
 						const str = window.wasm.odinMem.loadString(strP, strLen);
-						if (size !== cached_font_size) {
-							ctx.font = `${14 * dpr * size}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
-							cached_font_size = size;
-						}
+						updateFontSize(size);
 
 						ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
 						ctx.fillText(str, x * dpr, y * dpr);
@@ -168,8 +172,9 @@
 						ctx.lineWidth = strokeWidth * dpr;
 						ctx.stroke();
 					},
-					measure_text: (p, len) => {
+					measure_text: (p, len, size) => {
 						const str = window.wasm.odinMem.loadString(p, len);
+						updateFontSize(size);
 						const metrics = ctx.measureText(str);
 
 						return metrics.width / dpr;

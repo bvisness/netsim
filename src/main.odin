@@ -51,7 +51,7 @@ node_selected := -1
 pad_size     : f32 = 40
 buffer_size  : int = 15
 history_size : int = 50
-running := true
+running := false
 
 TICK_INTERVAL_BASE :: 0.7
 TICK_ANIM_DURATION_BASE :: 0.7
@@ -152,6 +152,9 @@ main :: proc() {
 }
 
 tick :: proc() {	
+	defer last_tick_t = t
+	defer tick_count += 1
+
 	PacketSend :: struct {
 		packet: Packet,
 		src: ^Node,
@@ -287,6 +290,63 @@ tick :: proc() {
 		queue.push_back(&node.avg_sent_history, u32(node.sent - node.old_sent))
 		queue.push_back(&node.avg_drop_history, u32(node.dropped - node.old_dropped))
 	}
+
+	// And extra fun stuff we do on each tick for testing:
+
+	// Generate random packets, huzzah
+	// if tick_count % 3 == 0 {
+	// 	for i := 0; i < 10; i += 1 {
+	// 		generate_random_packet()
+	// 	}
+	// }
+
+	if tick_count % 2 == 0 {
+		dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
+		if sess, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
+			sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
+			assert(ok)
+
+			// HACK: Open up destination for listening
+			dst := nodes_by_name["discord_1"]
+			dst.listening = true
+
+			iss := tcp_initial_sequence_num()
+
+			hello_discord := Packet{
+				dst_ip = dst_ip,
+				protocol = PacketProtocol.TCP,
+				tcp = PacketTcp{
+					sequence_number = iss,
+					control_flags = TCP_SYN,
+				},
+				color = COLOR_SYN,
+			}
+			send_packet(nodes_by_name["me"], hello_discord)
+
+			sess.initial_send_seq_num = iss
+			sess.send_unacknowledged = iss
+			sess.send_next = iss + 1
+
+			sess.state = TcpState.SynSent
+		} else {
+			if sess.state == TcpState.Established {
+				// send le data
+				p := Packet{
+					dst_ip = dst_ip,
+					data = "Hello!",
+					protocol = PacketProtocol.TCP,
+					tcp = PacketTcp{
+						// sequence_number = ???
+						ack_number = sess.receive_next,
+						control_flags = TCP_ACK,
+						window = 10, // excellent choice of window
+					},
+				}
+				send_packet(nodes_by_name["me"], p)
+				sess.send_next += u32(len(p.data))
+			}
+		}
+	}
 }
 
 drop_packet :: proc(packet: Packet, drop_at_dst: bool = false) {
@@ -362,63 +422,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	pan += pan_velocity
 
 	if running && t - last_tick_t >= tick_interval {
-		defer last_tick_t = t
-		defer tick_count += 1
-		
 		tick()
-
-		// Generate random packets, huzzah
-		// if tick_count % 3 == 0 {
-		// 	for i := 0; i < 10; i += 1 {
-		// 		generate_random_packet()
-		// 	}
-		// }
-
-		if tick_count % 15 == 0 {
-			dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
-			if sess, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
-				sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
-				assert(ok)
-
-				// HACK: Open up destination for listening
-				dst := nodes_by_name["discord_1"]
-				dst.listening = true
-
-				iss := tcp_initial_sequence_num()
-
-				hello_discord := Packet{
-					dst_ip = dst_ip,
-					protocol = PacketProtocol.TCP,
-					tcp = PacketTcp{
-						sequence_number = iss,
-						control_flags = TCP_SYN,
-					},
-					color = COLOR_SYN,
-				}
-				send_packet(nodes_by_name["me"], hello_discord)
-
-				sess.initial_send_seq_num = iss
-				sess.send_unacknowledged = iss
-				sess.send_next = iss + 1
-
-				sess.state = TcpState.SynSent
-			} else {
-				// Connection is established; send le data
-				p := Packet{
-					dst_ip = dst_ip,
-					data = "Hello!",
-					protocol = PacketProtocol.TCP,
-					tcp = PacketTcp{
-						// sequence_number = ???
-						ack_number = sess.receive_next,
-						control_flags = TCP_ACK,
-						window = 10, // excellent choice of window
-					},
-				}
-				send_packet(nodes_by_name["me"], p)
-				sess.send_next += u32(len(p.data))
-			}
-		}
 	}
 
     canvas_clear()
@@ -610,11 +614,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_text("SYNACK", Vec2{38, 20+20*2}, 1, text_color)
 	draw_text("RST",    Vec2{38, 20+20*3}, 1, text_color)
 
-	stop_start_rect := Rect{Vec2{20, 100}, Vec2{100, 30}}
-	draw_rect(stop_start_rect, 2, button_color)
-	draw_text(running ? "STOP" : "START", stop_start_rect.pos + Vec2{10, 10}, 1, text_color)
-	if clicked && pt_in_rect(mouse_pos, stop_start_rect) {
+	if button(rect(20, 100, 70, 30), running ? "STOP" : "START") {
 		running = !running
+	}
+	if !running {
+		if button(rect(20, 140, 70, 30), "STEP") {
+			tick()
+		}
 	}
 
 	remove_packets(&exiting_packets, dead_packets[:])
@@ -733,4 +739,14 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 	y2 := box.pos.y + box.size.y
 
 	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
+}
+
+button :: proc(rect: Rect, text: string) -> bool {
+	draw_rect(rect, 2, button_color)
+	text_width := measure_text(text, 1)
+	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+10}, 1, text_color)
+	if clicked && pt_in_rect(mouse_pos, rect) {
+		return true
+	}
+	return false
 }

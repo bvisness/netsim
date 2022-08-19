@@ -65,7 +65,7 @@ foreign js {
     canvas_text :: proc(str: string, x, y: f32, r, g, b, a: f32, scale: f32) ---
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
     canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
-    measure_text :: proc(str: string) -> f32 ---
+    measure_text :: proc(str: string, scale: f32) -> f32 ---
     play_tone :: proc(freq: f32) ---
 
     debugger :: proc() ---
