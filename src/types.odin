@@ -12,6 +12,8 @@ Rect :: struct {
 }
 
 Node :: struct {
+	logs: [dynamic]string, // DO NOT MOVE ELSEWHERE IN THE STRUCT
+
 	pos: Vec2,
 
 	name: string,
@@ -37,8 +39,6 @@ Node :: struct {
 
 	listening: bool,
 	tcp_sessions: [10]TcpSession,
-
-	logs: [dynamic]string,
 }
 
 Interface :: struct {
