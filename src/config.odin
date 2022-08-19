@@ -51,7 +51,12 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 			append(&rules, RoutingRule{ip = ip, subnet_mask = subnet_mask, interface_id = int(interface)})
 		}
 
-		append(nodes, make_node(pos, name, interfaces[:], rules[:]))
+		packets_per_tick, ok := obj["packets_per_tick"].(i64)
+		if !ok {
+			packets_per_tick = 1
+		}
+
+		append(nodes, make_node(pos, name, interfaces[:], rules[:], int(packets_per_tick)))
 	}
 
 	// parse connections

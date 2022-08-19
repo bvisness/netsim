@@ -17,6 +17,7 @@ Node :: struct {
 	name: string,
 	interfaces: []Interface,
 	routing_rules: []RoutingRule,
+	packets_per_tick: int,
 
 	sent: u64,
 	old_sent: u64,
@@ -162,12 +163,19 @@ TcpState :: enum {
 	TimeWait,
 }
 
-make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rules: []RoutingRule) -> Node {
+make_node :: proc(
+	pos: Vec2,
+	name: string,
+	interfaces: []Interface,
+	routing_rules: []RoutingRule,
+	packets_per_tick: int,
+) -> Node {
 	n := Node{
 		pos = pos,
 		name = name,
 		interfaces = interfaces,
 		routing_rules = routing_rules,
+		packets_per_tick = packets_per_tick,
 		logs = make([dynamic]string),
 	}
 
@@ -196,7 +204,8 @@ make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rule
 	return n
 }
 
-node_log :: proc(n: ^Node, msg: string) {
+node_log :: proc(n: ^Node, msg: string, location := #caller_location) {
+	fmt.println(msg, location)
 	append(&n.logs, msg)
 }
 

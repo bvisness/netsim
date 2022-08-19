@@ -8,11 +8,9 @@ import "core:math/rand"
 import "core:mem"
 import "core:runtime"
 import "core:strings"
+import "vendor:wasm/js"
 
-global_arena_data := [1_000_000]byte{}
 global_arena := Arena{}
-
-temp_arena_data := [1_000_000]byte{}
 temp_arena := Arena{}
 
 wasmContext := runtime.default_context()
@@ -96,8 +94,10 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 }
 
 main :: proc() {
-    arena_init(&global_arena, global_arena_data[:])
-    arena_init(&temp_arena, temp_arena_data[:])
+	global_data, _ := js.page_alloc(100)
+	temp_data, _ := js.page_alloc(100)
+    arena_init(&global_arena, global_data)
+    arena_init(&temp_arena, temp_data)
 
     wasmContext.allocator = arena_allocator(&global_arena)
     wasmContext.temp_allocator = arena_allocator(&temp_arena)
@@ -162,7 +162,6 @@ tick :: proc() {
 	}
 	packet_sends := make([dynamic]PacketSend, context.temp_allocator)
 
-	nextnode:
 	for node, node_id in &nodes {
 		// Update packet animation data (for everything but the top one, which will be popped)
 		for i := 1; i < queue.len(node.buffer); i += 1 {
@@ -195,63 +194,66 @@ tick :: proc() {
 		}
 		queue.push_back(&node.avg_tick_history, average_packet_ticks)
  
-		// Try to send
-		packet, ok := queue.pop_front_safe(&node.buffer)
-		if !ok {
-			continue
-		}
-
-		// Handle packets destined for this node
-		is_for_me := false
-		for iface in node.interfaces {
-			if packet.dst_ip == iface.ip {
-				is_for_me = true
+		nextpacket:
+		for i := 0; i < node.packets_per_tick; i += 1 {
+			// Try to send
+			packet, ok := queue.pop_front_safe(&node.buffer)
+			if !ok {
 				break
 			}
-		}
-		if is_for_me {
-			// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
 
-			handle_packet(&node, packet)
-
-			packet.anim = PacketAnimation.Delivered
-			packet.dst_node = &node
-			packet.delivered_t = t
-			append(&exiting_packets, packet)
-			continue
-		}
-
-		// fmt.printf("Checking node %s\n", node.name)
-		// Uh, route it somewhere else
-		for rule in node.routing_rules {
-			masked_dest := packet.dst_ip & rule.subnet_mask
-			// fmt.printf("%s & %s (%s) == %s?\n", ip_to_str(packet.dst_ip), ip_to_str(rule.subnet_mask), ip_to_str(masked_dest), ip_to_str(rule.ip))
-			if masked_dest == rule.ip {
-				if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
-
-					packet.ttl += 1
-					append(&packet_sends, PacketSend{
-						packet = packet,
-						src = &node,
-						dst = dst_node,
-					})
-					// fmt.printf("Node %d: here have packet!!\n", node_id)
-				} else {
-					// fmt.printf("Node %s [%s]: bad routing rule! discarding packet.\n", node.name, ip_to_str(node.interfaces[0].ip))
-					// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
-					node.dropped += 1
-					drop_packet(packet)
-					running = false
+			// Handle packets destined for this node
+			is_for_me := false
+			for iface in node.interfaces {
+				if packet.dst_ip == iface.ip {
+					is_for_me = true
+					break
 				}
-				continue nextnode
 			}
-		}
+			if is_for_me {
+				// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
 
-		// the hell is this packet
-		// fmt.printf("Node %s [%s]: the hell is this packet? discarding\n", node.name, ip_to_str(node.interfaces[0].ip))
-		// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
-		node.dropped += 1
-		drop_packet(packet)
+				handle_packet(&node, packet)
+
+				packet.anim = PacketAnimation.Delivered
+				packet.dst_node = &node
+				packet.delivered_t = t
+				append(&exiting_packets, packet)
+				continue
+			}
+
+			// fmt.printf("Checking node %s\n", node.name)
+			// Uh, route it somewhere else
+			for rule in node.routing_rules {
+				masked_dest := packet.dst_ip & rule.subnet_mask
+				// fmt.printf("%s & %s (%s) == %s?\n", ip_to_str(packet.dst_ip), ip_to_str(rule.subnet_mask), ip_to_str(masked_dest), ip_to_str(rule.ip))
+				if masked_dest == rule.ip {
+					if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
+
+						packet.ttl += 1
+						append(&packet_sends, PacketSend{
+							packet = packet,
+							src = &node,
+							dst = dst_node,
+						})
+						// fmt.printf("Node %d: here have packet!!\n", node_id)
+					} else {
+						// fmt.printf("Node %s [%s]: bad routing rule! discarding packet.\n", node.name, ip_to_str(node.interfaces[0].ip))
+						// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
+						node.dropped += 1
+						drop_packet(packet)
+						running = false
+					}
+					continue nextpacket
+				}
+			}
+
+			// the hell is this packet
+			// fmt.printf("Node %s [%s]: the hell is this packet? discarding\n", node.name, ip_to_str(node.interfaces[0].ip))
+			// fmt.printf("%s -> %s\n", ip_to_str(packet.src_ip), ip_to_str(packet.dst_ip))
+			node.dropped += 1
+			drop_packet(packet)
+		}
 	}
 
 	for send in packet_sends {
@@ -300,7 +302,7 @@ tick :: proc() {
 	// 	}
 	// }
 
-	if tick_count % 2 == 0 {
+	if tick_count % 1 == 0 {
 		dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
 		if sess, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
 			sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
