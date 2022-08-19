@@ -143,7 +143,7 @@ TcpSession :: struct {
 	initial_send_seq_num: u32, // ISS
 
 	receive_next: u32, // RCV.NXT
-	receive_window: u32, // RCV.WND
+	receive_window: u16, // RCV.WND
 	// no urgent pointers
 	initial_receive_seq_num: u32, // IRS
 }

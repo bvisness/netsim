@@ -20,6 +20,9 @@ handle_packet :: proc(n: ^Node, p: Packet) {
 //
 // https://www.rfc-editor.org/rfc/rfc9293.html#name-event-processing
 handle_tcp_packet :: proc(n: ^Node, p: Packet) {
+    node_log(n, "Incoming packet:")
+    node_log_tcp_packet(n, p)
+
     sess, ok := get_tcp_session(n, p.src_ip)
     if !ok && !n.listening {
         // CLOSED state (3.10.7.1)
@@ -253,21 +256,21 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // window, if not in order). This has four cases because of zeroes.
         acceptable: bool
         unacceptable_case: int
-        if p.tcp.sequence_number == 0 && sess.receive_window == 0 {
+        if len(p.data) == 0 && sess.receive_window == 0 {
             acceptable = p.tcp.sequence_number == sess.receive_next
             unacceptable_case = 1
-        } else if p.tcp.sequence_number == 0 && sess.receive_window > 0 {
-            acceptable = sess.receive_next <= p.tcp.sequence_number && p.tcp.sequence_number < sess.receive_next + sess.receive_window // TODO(mod)
+        } else if len(p.data) == 0 && sess.receive_window > 0 {
+            acceptable = sess.receive_next <= p.tcp.sequence_number && p.tcp.sequence_number < sess.receive_next + u32(sess.receive_window) // TODO(mod)
             unacceptable_case = 2
-        } else if p.tcp.sequence_number > 0 && sess.receive_window == 0 {
+        } else if len(p.data) > 0 && sess.receive_window == 0 {
             acceptable = false
             unacceptable_case = 3
-        } else if p.tcp.sequence_number > 0 && sess.receive_window > 0 {
+        } else if len(p.data) > 0 && sess.receive_window > 0 {
             segStart := p.tcp.sequence_number
             segEnd := p.tcp.sequence_number + u32(len(p.data))
             acceptable = (
-                sess.receive_next <= segStart && segStart < sess.receive_next + sess.receive_window || // TODO(mod)
-                sess.receive_next <= segEnd && segEnd < sess.receive_next + sess.receive_window) // TODO(mod)
+                sess.receive_next <= segStart && segStart < sess.receive_next + u32(sess.receive_window) || // TODO(mod)
+                sess.receive_next <= segEnd && segEnd < sess.receive_next + u32(sess.receive_window)) // TODO(mod)
             unacceptable_case = 4
         } else {
             fmt.println("ERROR! You messed up a case when checking for acceptable packets!")
@@ -277,8 +280,6 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         is_ack := p.tcp.control_flags&TCP_ACK != 0
         is_rst := p.tcp.control_flags&TCP_RST != 0
         if !acceptable && !is_ack && !is_rst {
-            // TODO: Still handle valid ACKs and RSTs.
-
             node_log(n, fmt.aprintf("Unacceptable segment (case %d).", unacceptable_case))
             node_log_tcp_packet(n, p)
             node_log_tcp_state(n, sess)
@@ -406,8 +407,9 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
 
             if p.tcp.ack_number <= sess.send_unacknowledged { // TODO(mod)
                 // This ACK is a duplicate and can be ignored.
-                return false
+                node_log(n, "Duplicate ACK. No worries.")
             } else if sess.send_unacknowledged < p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
+                node_log(n, "Advancing send window.")
                 sess.send_unacknowledged = p.tcp.ack_number
                 // TODO: Clear acknowledged segments from the retransmission queue.
             } else {
@@ -438,8 +440,21 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         }
 
         // Process the segment's data
-        fmt.println(p.data)
-        // TODO: Do better than this...
+        node_log(n, fmt.aprintf("Received: %s", p.data))
+        sess.receive_next += u32(len(p.data))
+        if len(p.data) > 0 {
+            send_packet(n, Packet{
+                dst_ip = p.src_ip,
+                protocol = PacketProtocol.TCP,
+                tcp = PacketTcp{
+                    sequence_number = sess.send_next,
+                    ack_number = sess.receive_next,
+                    control_flags = TCP_ACK,
+                    window = sess.receive_window,
+                },
+                color = COLOR_ACK,
+            })
+        }
 
         // TODO: FIN
 
@@ -463,7 +478,8 @@ send_packet :: proc(n: ^Node, p: Packet) {
     p.created_t = t
     queue.push_back(&n.buffer, p)
 
-    node_log(n, fmt.aprintf("Sent %s (SEG.SEQ=%d)", control_flag_str(p.tcp.control_flags), p.tcp.sequence_number))
+    node_log(n, "Sent packet:")
+    node_log_tcp_packet(n, p)
 }
 
 get_tcp_session :: proc(n: ^Node, ip: u32) -> (^TcpSession, bool) {
@@ -494,11 +510,11 @@ close_tcp_session :: proc(sess: ^TcpSession) {
 }
 
 node_log_tcp_packet :: proc(n: ^Node, p: Packet) {
-    node_log(n, fmt.aprintf("  SEG.SEQ: %v", p.tcp.sequence_number))
-    node_log(n, fmt.aprintf("  SEG.ACK: %v", p.tcp.ack_number))
-    node_log(n, fmt.aprintf("  SEG.LEN: %v", len(p.data)))
+    node_log(n, fmt.aprintf("  SEG: SEQ=%v, ACK=%v, LEN=%v, WND=%v", p.tcp.sequence_number, p.tcp.ack_number, len(p.data), p.tcp.window))
     node_log(n, fmt.aprintf("  Control: %v", control_flag_str(p.tcp.control_flags)))
-    node_log(n, fmt.aprintf("  SEG.WND: %v", p.tcp.window))
+    if len(p.data) > 0 {
+        node_log(n, fmt.aprintf("  Data: %s", p.data))
+    }
 }
 
 node_log_tcp_state :: proc(n: ^Node, sess: ^TcpSession) {

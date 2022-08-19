@@ -42,6 +42,7 @@ last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 pan            := Vec2{}
 scroll_velocity: f32 = 0
+is_mouse_down := false
 clicked := false
 
 node_selected := -1
@@ -100,7 +101,7 @@ main :: proc() {
 
     context = wasmContext
 
-	set_timescale(0.2)
+	set_timescale(0.4)
 
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
@@ -320,11 +321,18 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 tick_count := 0
 last_tick_t := t
 
+was_mouse_down := false
+
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
-
 	defer free_all(context.temp_allocator)
+
+	if !was_mouse_down && is_mouse_down {
+		clicked = true
+	}
+	defer was_mouse_down = is_mouse_down
+	defer clicked = false
 
     t += dt
 
@@ -365,7 +373,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		if tick_count % 15 == 0 {
 			dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
-			if _, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
+			if sess, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
 				sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
 				assert(ok)
 
@@ -391,6 +399,21 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				sess.send_next = iss + 1
 
 				sess.state = TcpState.SynSent
+			} else {
+				// Connection is established; send le data
+				p := Packet{
+					dst_ip = dst_ip,
+					data = "Hello!",
+					protocol = PacketProtocol.TCP,
+					tcp = PacketTcp{
+						// sequence_number = ???
+						ack_number = sess.receive_next,
+						control_flags = TCP_ACK,
+						window = 10, // excellent choice of window
+					},
+				}
+				send_packet(nodes_by_name["me"], p)
+				sess.send_next += u32(len(p.data))
 			}
 		}
 	}
@@ -490,13 +513,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// check intersections
 	if clicked {
 		for node, idx in &nodes {
-			box := Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}
-			x1 := box.pos.x
-			y1 := box.pos.y
-			x2 := box.pos.x + box.size.x
-			y2 := box.pos.y + box.size.y
-
-			if x1 <= mouse_pos.x && mouse_pos.x <= x2 && y1 <= mouse_pos.y && mouse_pos.y <= y2 {
+			if pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
 				node_selected = idx
 				break
 			}
@@ -544,7 +561,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		// render logs and debug info
 		{
-			logs_top: f32 = 700
+			logs_left: f32 = menu_offset + 500
+			logs_top: f32 = 50
 			y := logs_top
 			next_line := proc(y: ^f32) -> f32 {
 				res := y^
@@ -552,35 +570,50 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				return res
 			}
 
-			canvas_text("Connections:", menu_offset, next_line(&y), 0, 0, 0, 255)
+			canvas_text("Connections:", logs_left, next_line(&y), 0, 0, 0, 255)
 			for sess in inspect_node.tcp_sessions {
 				if sess.ip == 0 {
 					continue
 				}
-				canvas_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), menu_offset, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  State: %v", sess.state), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  SND.UNA: %v", sess.send_unacknowledged), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  SND.NXT: %v", sess.send_next), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  SND.WND: %v", sess.send_window), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  ISS: %v", sess.initial_send_seq_num), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  RCV.NXT: %v", sess.receive_next), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  RCV.WND: %v", sess.receive_window), logs_left, next_line(&y), 0, 0, 0, 255)
+				canvas_text(fmt.tprintf("  IRS: %v", sess.initial_receive_seq_num), logs_left, next_line(&y), 0, 0, 0, 255)
 			}
 
 			next_line(&y)
 
-			log_lines := 40
-			canvas_text("Logs:", menu_offset, next_line(&y), 0, 0, 0, 255)
+			log_lines := 50
+			canvas_text("Logs:", logs_left, next_line(&y), 0, 0, 0, 255)
 			if len(inspect_node.logs) > log_lines {
-				canvas_text("...", menu_offset, next_line(&y), 0, 0, 0, 255)
+				canvas_text("...", logs_left, next_line(&y), 0, 0, 0, 255)
 			}
 			for msg in inspect_node.logs[max(0, len(inspect_node.logs)-log_lines):] {
-				canvas_text(msg, menu_offset, next_line(&y), 0, 0, 0, 255)
+				canvas_text(msg, logs_left, next_line(&y), 0, 0, 0, 255)
 			}
 		}
 	}
 
-	canvas_circle(20, 20+20*0, packet_size, COLOR_SYN.x, COLOR_SYN.y, COLOR_SYN.z, 255)
-	canvas_circle(20, 20+20*1, packet_size, COLOR_ACK.x, COLOR_ACK.y, COLOR_ACK.z, 255)
-	canvas_circle(20, 20+20*2, packet_size, COLOR_SYNACK.x, COLOR_SYNACK.y, COLOR_SYNACK.z, 255)
-	canvas_circle(20, 20+20*3, packet_size, COLOR_RST.x, COLOR_RST.y, COLOR_RST.z, 255)
-	canvas_text("SYN",    30, 14+20*0, 0, 0, 0, 255)
-	canvas_text("ACK",    30, 14+20*1, 0, 0, 0, 255)
-	canvas_text("SYNACK", 30, 14+20*2, 0, 0, 0, 255)
-	canvas_text("RST",    30, 14+20*3, 0, 0, 0, 255)
+	canvas_circle(20 + packet_size, 20+packet_size+20*0, packet_size, COLOR_SYN.x, COLOR_SYN.y, COLOR_SYN.z, 255)
+	canvas_circle(20 + packet_size, 20+packet_size+20*1, packet_size, COLOR_ACK.x, COLOR_ACK.y, COLOR_ACK.z, 255)
+	canvas_circle(20 + packet_size, 20+packet_size+20*2, packet_size, COLOR_SYNACK.x, COLOR_SYNACK.y, COLOR_SYNACK.z, 255)
+	canvas_circle(20 + packet_size, 20+packet_size+20*3, packet_size, COLOR_RST.x, COLOR_RST.y, COLOR_RST.z, 255)
+	canvas_text("SYN",    38, 20+20*0, 0, 0, 0, 255)
+	canvas_text("ACK",    38, 20+20*1, 0, 0, 0, 255)
+	canvas_text("SYNACK", 38, 20+20*2, 0, 0, 0, 255)
+	canvas_text("RST",    38, 20+20*3, 0, 0, 0, 255)
+
+	stop_start_rect := Rect{Vec2{20, 100}, Vec2{100, 30}}
+	canvas_rect(stop_start_rect.pos.x, stop_start_rect.pos.y, stop_start_rect.size.x, stop_start_rect.size.y, 2, 240, 240, 240, 255)
+	canvas_text(running ? "STOP" : "START", stop_start_rect.pos.x + 10, stop_start_rect.pos.y + 10, 0, 0, 0, 255)
+	if clicked && pt_in_rect(mouse_pos, stop_start_rect) {
+		running = !running
+	}
 
 	remove_packets(&exiting_packets, dead_packets[:])
 
@@ -689,4 +722,13 @@ remove_packets :: proc(packets: ^[dynamic]Packet, indexes: []int) {
 	for i := len(indexes)-1; i >= 0; i -= 1 {
 		ordered_remove(packets, indexes[i])
 	}
+}
+
+pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
+	x1 := box.pos.x
+	y1 := box.pos.y
+	x2 := box.pos.x + box.size.x
+	y2 := box.pos.y + box.size.y
+
+	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
 }
