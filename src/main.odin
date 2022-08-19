@@ -100,7 +100,7 @@ main :: proc() {
 
     context = wasmContext
 
-	set_timescale(1)
+	set_timescale(0.2)
 
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
@@ -323,9 +323,6 @@ last_tick_t := t
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
-	if !running {
-		return false
-	}
 
 	defer free_all(context.temp_allocator)
 
@@ -353,7 +350,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 	pan += 50 * pan_velocity * dt
 
-	if t - last_tick_t >= tick_interval {
+	if running && t - last_tick_t >= tick_interval {
 		defer last_tick_t = t
 		defer tick_count += 1
 		
@@ -368,9 +365,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		if tick_count % 15 == 0 {
 			dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
-			if sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip); ok {
+			if _, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
+				sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
+				assert(ok)
+
 				// HACK: Open up destination for listening
 				dst := nodes_by_name["discord_1"]
+				dst.listening = true
 
 				iss := tcp_initial_sequence_num()
 
@@ -381,7 +382,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 						sequence_number = iss,
 						control_flags = TCP_SYN,
 					},
-					color = Vec3{220, 120, 220},
+					color = COLOR_SYN,
 				}
 				send_packet(nodes_by_name["me"], hello_discord)
 
@@ -540,7 +541,46 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
 		draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
 		draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
+
+		// render logs and debug info
+		{
+			logs_top: f32 = 700
+			y := logs_top
+			next_line := proc(y: ^f32) -> f32 {
+				res := y^
+				y^ += 20
+				return res
+			}
+
+			canvas_text("Connections:", menu_offset, next_line(&y), 0, 0, 0, 255)
+			for sess in inspect_node.tcp_sessions {
+				if sess.ip == 0 {
+					continue
+				}
+				canvas_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), menu_offset, next_line(&y), 0, 0, 0, 255)
+			}
+
+			next_line(&y)
+
+			log_lines := 40
+			canvas_text("Logs:", menu_offset, next_line(&y), 0, 0, 0, 255)
+			if len(inspect_node.logs) > log_lines {
+				canvas_text("...", menu_offset, next_line(&y), 0, 0, 0, 255)
+			}
+			for msg in inspect_node.logs[max(0, len(inspect_node.logs)-log_lines):] {
+				canvas_text(msg, menu_offset, next_line(&y), 0, 0, 0, 255)
+			}
+		}
 	}
+
+	canvas_circle(20, 20+20*0, packet_size, COLOR_SYN.x, COLOR_SYN.y, COLOR_SYN.z, 255)
+	canvas_circle(20, 20+20*1, packet_size, COLOR_ACK.x, COLOR_ACK.y, COLOR_ACK.z, 255)
+	canvas_circle(20, 20+20*2, packet_size, COLOR_SYNACK.x, COLOR_SYNACK.y, COLOR_SYNACK.z, 255)
+	canvas_circle(20, 20+20*3, packet_size, COLOR_RST.x, COLOR_RST.y, COLOR_RST.z, 255)
+	canvas_text("SYN",    30, 14+20*0, 0, 0, 0, 255)
+	canvas_text("ACK",    30, 14+20*1, 0, 0, 0, 255)
+	canvas_text("SYNACK", 30, 14+20*2, 0, 0, 0, 255)
+	canvas_text("RST",    30, 14+20*3, 0, 0, 0, 255)
 
 	remove_packets(&exiting_packets, dead_packets[:])
 

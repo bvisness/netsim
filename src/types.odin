@@ -36,6 +36,8 @@ Node :: struct {
 
 	listening: bool,
 	tcp_sessions: [10]TcpSession,
+
+	logs: [dynamic]string,
 }
 
 Interface :: struct {
@@ -166,6 +168,7 @@ make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rule
 		name = name,
 		interfaces = interfaces,
 		routing_rules = routing_rules,
+		logs = make([dynamic]string),
 	}
 
 	if ok := queue.init(&n.buffer, buffer_size); !ok {
@@ -191,4 +194,24 @@ make_node :: proc(pos: Vec2, name: string, interfaces: []Interface, routing_rule
 	}
 
 	return n
+}
+
+node_log :: proc(n: ^Node, msg: string) {
+	append(&n.logs, msg)
+}
+
+control_flag_str :: proc(f: u16) -> string {
+	if f&TCP_SYN != 0 && f&TCP_ACK != 0 {
+		return "SYNACK"
+	} else if f&TCP_RST != 0 && f&TCP_ACK != 0 {
+		return "RST / ACK"
+	} else if f&TCP_SYN != 0 {
+		return "SYN"
+	} else if f&TCP_ACK != 0 {
+		return "ACK"
+	} else if f&TCP_RST != 0 {
+		return "RST"
+	} else {
+		return "???"
+	}
 }
