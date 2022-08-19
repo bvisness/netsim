@@ -95,7 +95,7 @@
 		}
 
 		async function init() {
-			window.wasm = await odin.runWasm('netsim.wasm', null, {
+			window.wasm = await odin.runWasm('netsim_patched.wasm', null, {
 				js: {
 					// Canvas
 					canvas_clear() {

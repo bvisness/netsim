@@ -34,7 +34,6 @@ for ext in ['*.o', '*.wasm', '*.wat']:
 os.makedirs('build', exist_ok=True)
 
 print('Compiling...')
-
 subprocess.run([
     odin,
     'build', 'src',
@@ -54,6 +53,30 @@ if RELEASE:
         '--zero-filled-memory',
     ])
 
+# Patch memcpy and memmove
+print('Patching WASM...')
+subprocess.run([
+    'wasm2wat',
+    '-o', 'build/netsim.wat',
+    'build/netsim.wasm',
+])
+memcpy = """(\\1
+    local.get 0
+    local.get 1
+    local.get 2
+    memory.copy
+    local.get 0)"""
+with open('build/netsim.wat', 'r') as infile, open('build/netsim_patched.wat', 'w') as outfile:
+    wat = infile.read()
+    wat = re.sub(r'\((func \$memcpy.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
+    wat = re.sub(r'\((func \$memmove.*?\(result i32\)).*?local.get 0(.*?return)?\)', memcpy, wat, flags=re.DOTALL)
+    outfile.write(wat)
+subprocess.run([
+    'wat2wasm',
+    '-o', 'build/netsim_patched.wasm',
+    'build/netsim_patched.wat',
+])
+
 #
 # Output the dist folder for upload
 #
@@ -67,7 +90,7 @@ root = 'src/index.html'
 assets = [
     'src/normalize.css',
     'src/runtime.js',
-    'build/netsim.wasm',
+    'build/netsim_patched.wasm',
 ]
 
 rootContents = open(root).read()
@@ -86,12 +109,5 @@ for asset in assets:
 
 with open('build/dist/index.html', 'w') as f:
     f.write(rootContents)
-
-# Produce a WAT version of the code for inspection.
-if True:
-    os.chdir('build')
-    print('Producing .wat files...')
-    subprocess.run(['wasm2wat', 'netsim.wasm', '-o', 'netsim.wat'])
-    os.chdir('..')
 
 print('Done!')

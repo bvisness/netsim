@@ -204,8 +204,7 @@ make_node :: proc(
 	return n
 }
 
-node_log :: proc(n: ^Node, msg: string, location := #caller_location) {
-	fmt.println(msg, location)
+node_log :: proc(n: ^Node, msg: string) {
 	append(&n.logs, msg)
 }
 
