@@ -41,6 +41,8 @@ pan            := Vec2{}
 scroll_velocity: f32 = 0
 clicked := false
 
+node_selected := -1
+
 pad_size     : f32 = 40
 buffer_size  : int = 15
 history_size : int = 50
@@ -119,8 +121,8 @@ main :: proc() {
 	for i := 0; i < len(nodes); i += 1 {
 		node := &nodes[i]
 
-		node.pos.x = (node.pos.x - min_width) + pad_size
-		node.pos.y = (node.pos.y - min_height) + pad_size
+		node.pos.x = (node.pos.x - min_width)
+		node.pos.y = (node.pos.y - min_height)
 
 		if node.pos.x > max_width {
 			max_width = node.pos.x
@@ -130,8 +132,9 @@ main :: proc() {
 			max_height = node.pos.y
 		}
 	}
-	max_width += node_size
-	max_height += node_size
+	max_width += node_size + pad_size
+	max_height += node_size + pad_size
+	pan = Vec2{pad_size, pad_size}
 }
 
 tick :: proc() {	
@@ -317,7 +320,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     t += dt
 
 	// compute scroll
-	scale += 0.05 * scroll_velocity * dt
+	scale *= 1 + (0.05 * scroll_velocity * dt)
 	if scale < 0.1 {
 		scale = 0.1
 	} else if scale > 1.5 {
@@ -466,44 +469,61 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	menu_offset := max_width + (pad_size * 2)
 
-	// This is cheaty, make this user driven
-	inspect_node := nodes[4]
+	// check intersections
+	if clicked {
+		for node, idx in &nodes {
+			box := Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}
+			x1 := box.pos.x
+			y1 := box.pos.y
+			x2 := box.pos.x + box.size.x
+			y2 := box.pos.y + box.size.y
 
-	canvas_text("Node Inspector", menu_offset, pad_size, text_color.x, text_color.y, text_color.z, 255)
-	canvas_text(fmt.tprintf("Name: %s", inspect_node.name), menu_offset, pad_size + text_height + 4, text_color2.x, text_color2.y, text_color2.z, 255)
-	canvas_text(fmt.tprintf("Sent: %d", inspect_node.sent), menu_offset, pad_size + ((text_height + 4) * 2), text_color2.x, text_color2.y, text_color2.z, 255)
-	canvas_text(fmt.tprintf("Received: %d", inspect_node.received), menu_offset, pad_size + ((text_height + 4) * 3), text_color2.x, text_color2.y, text_color2.z, 255)
-	canvas_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), menu_offset, pad_size + ((text_height + 4) * 4), text_color2.x, text_color2.y, text_color2.z, 255)
-
-	buffer_used := min(buffer_size, queue.len(inspect_node.buffer))
-	canvas_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), menu_offset, pad_size + ((text_height + 4) * 5), text_color2.x, text_color2.y, text_color2.z, 255)
-
-	average_packet_ticks : u32 = 0
-	average_packet_ttl   : u32 = 0
-	node_packet_count := queue.len(inspect_node.buffer)
-
-	if node_packet_count > 0 {
-		for i := 0; i < node_packet_count; i += 1 {
-			packet := queue.get_ptr(&inspect_node.buffer, i)
-			average_packet_ticks += packet.tick_life
-			average_packet_ttl += packet.ttl
+			if x1 <= mouse_pos.x && mouse_pos.x <= x2 && y1 <= mouse_pos.y && mouse_pos.y <= y2 {
+				node_selected = idx
+				break
+			}
 		}
-		average_packet_ticks /= u32(node_packet_count)
-		average_packet_ttl /= u32(node_packet_count)
 	}
 
-	canvas_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), menu_offset, pad_size + ((text_height + 4) * 6), text_color2.x, text_color2.y, text_color2.z, 255)
-	canvas_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), menu_offset, pad_size + ((text_height + 4) * 7), text_color2.x, text_color2.y, text_color2.z, 255)
+	if node_selected != -1 {
+		inspect_node := nodes[node_selected]
+
+		canvas_text("Node Inspector", menu_offset, pad_size, text_color.x, text_color.y, text_color.z, 255)
+		canvas_text(fmt.tprintf("Name: %s", inspect_node.name), menu_offset, pad_size + text_height + 4, text_color2.x, text_color2.y, text_color2.z, 255)
+		canvas_text(fmt.tprintf("Sent: %d", inspect_node.sent), menu_offset, pad_size + ((text_height + 4) * 2), text_color2.x, text_color2.y, text_color2.z, 255)
+		canvas_text(fmt.tprintf("Received: %d", inspect_node.received), menu_offset, pad_size + ((text_height + 4) * 3), text_color2.x, text_color2.y, text_color2.z, 255)
+		canvas_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), menu_offset, pad_size + ((text_height + 4) * 4), text_color2.x, text_color2.y, text_color2.z, 255)
+
+		buffer_used := min(buffer_size, queue.len(inspect_node.buffer))
+		canvas_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), menu_offset, pad_size + ((text_height + 4) * 5), text_color2.x, text_color2.y, text_color2.z, 255)
+
+		average_packet_ticks : u32 = 0
+		average_packet_ttl   : u32 = 0
+		node_packet_count := queue.len(inspect_node.buffer)
+
+		if node_packet_count > 0 {
+			for i := 0; i < node_packet_count; i += 1 {
+				packet := queue.get_ptr(&inspect_node.buffer, i)
+				average_packet_ticks += packet.tick_life
+				average_packet_ttl += packet.ttl
+			}
+			average_packet_ticks /= u32(node_packet_count)
+			average_packet_ttl /= u32(node_packet_count)
+		}
+
+		canvas_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), menu_offset, pad_size + ((text_height + 4) * 6), text_color2.x, text_color2.y, text_color2.z, 255)
+		canvas_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), menu_offset, pad_size + ((text_height + 4) * 7), text_color2.x, text_color2.y, text_color2.z, 255)
 
 
-	// render history graph
-	graph_top := ((text_height + 4) * 7) + (pad_size * 2)
-	graph_size : f32 = 200
-	graph_gap : f32 = (text_height + 4) * 2
-	draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, menu_offset, graph_top, graph_size)
-	draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
-	draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
-	draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
+		// render history graph
+		graph_top := ((text_height + 4) * 7) + (pad_size * 2)
+		graph_size : f32 = 200
+		graph_gap : f32 = (text_height + 4) * 2
+		draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, menu_offset, graph_top, graph_size)
+		draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
+		draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
+		draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
+	}
 
 	remove_packets(&exiting_packets, dead_packets[:])
 
