@@ -575,7 +575,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		{
 			logs_left: f32 = menu_offset + 500
 
-			y = 50
+			y = pad_size
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, text_color)
 			for sess in inspect_node.tcp_sessions {
 				if sess.ip == 0 {
