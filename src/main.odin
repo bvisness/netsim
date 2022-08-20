@@ -613,7 +613,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			next_line(&y)
 
-			log_lines := int((height - (pad_size * 2) - y) / (text_height + 4))
+			log_lines := max(int((height - (pad_size * 2) - y) / (text_height + 4)), 0)
 			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
 			if len(inspect_node.logs) > log_lines {
 				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
