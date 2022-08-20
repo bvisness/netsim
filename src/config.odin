@@ -101,7 +101,8 @@ net_config := `
 				{ "ip": "3.0.0.0",   "subnet": "255.0.0.0",       "interface": 1 },
 				{ "ip": "4.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 },
 				{ "ip": "5.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 }
-			]
+			],
+			"packets_per_tick": 2
 		},
 		{
 			"name": "google",
@@ -111,7 +112,8 @@ net_config := `
 				{ "ip": "2.0.0.0", "subnet": "255.0.0.0", "interface": 0 },
 				{ "ip": "4.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0",   "interface": 1 }
-			]
+			],
+			"packets_per_tick": 2
 		},
 		{
 			"name": "cloudflare",
@@ -121,7 +123,8 @@ net_config := `
 				{ "ip": "2.0.0.0", "subnet": "255.0.0.0", "interface": 0 },
 				{ "ip": "3.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "5.0.0.0", "subnet": "255.0.0.0", "interface": 2 }
-			]
+			],
+			"packets_per_tick": 2
 		},
 		{
 			"name": "discord_hub",
@@ -133,7 +136,8 @@ net_config := `
 				{ "ip": "5.5.100.2", "subnet": "255.255.255.255", "interface": 2 },
 				{ "ip": "5.5.100.3", "subnet": "255.255.255.255", "interface": 3 },
 				{ "ip": "0.0.0.0",   "subnet": "0.0.0.0",         "interface": 0 },
-			]
+			],
+			"packets_per_tick": 2
 		},
 		{
 			"name": "discord_1",
