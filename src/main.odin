@@ -630,10 +630,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*1}, packet_size, COLOR_ACK)
 	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*2}, packet_size, COLOR_SYNACK)
 	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*3}, packet_size, COLOR_RST)
+	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*4}, packet_size, text_color)
 	draw_text("SYN",    Vec2{38, top_pad+20*0}, 1, default_font, text_color)
 	draw_text("ACK",    Vec2{38, top_pad+20*1}, 1, default_font, text_color)
 	draw_text("SYNACK", Vec2{38, top_pad+20*2}, 1, default_font, text_color)
 	draw_text("RST",    Vec2{38, top_pad+20*3}, 1, default_font, text_color)
+	draw_text("DATA",   Vec2{38, top_pad+20*4}, 1, default_font, text_color)
 
 	edge_pad : f32 = 10
 	button_height : f32 = 30
