@@ -83,7 +83,7 @@ Packet :: struct {
 
 	pos: Vec2,
 	last_pos: Vec2,
-	color: Vec3,
+	color: ^Vec3,
 	anim: PacketAnimation,
 	// NOTE(ben): If / when we add node deletion, this could get into use-after-free territory.
 	// Maybe avoid it by not allowing editing while simulating...

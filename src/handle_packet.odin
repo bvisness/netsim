@@ -3,10 +3,10 @@ package main
 import "core:container/queue"
 import "core:fmt"
 
-COLOR_RST :: Vec3{220, 80, 80}
-COLOR_SYN :: Vec3{80, 80, 220}
-COLOR_ACK :: Vec3{80, 220, 80}
-COLOR_SYNACK :: Vec3{80, 220, 220}
+COLOR_RST    := Vec3{220, 80, 80}
+COLOR_SYN    := Vec3{80, 80, 220}
+COLOR_ACK    := Vec3{80, 220, 80}
+COLOR_SYNACK := Vec3{80, 220, 220}
 
 handle_packet :: proc(n: ^Node, p: Packet) {
     #partial switch p.protocol {
@@ -44,7 +44,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     ack_number = p.tcp.sequence_number + u32(len(p.data)),
                     control_flags = TCP_RST|TCP_ACK,
                 },
-                color = COLOR_RST,
+                color = &COLOR_RST,
             })
         } else {
             node_log(n, "Received a packet while closed (case 2).")
@@ -55,7 +55,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     sequence_number = p.tcp.ack_number,
                     control_flags = TCP_RST,
                 },
-                color = COLOR_RST,
+                color = &COLOR_RST,
             })
         }
         return
@@ -77,7 +77,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     sequence_number = p.tcp.ack_number,
                     control_flags = TCP_RST,
                 },
-                color = COLOR_RST,
+                color = &COLOR_RST,
             })
             return
         }
@@ -107,7 +107,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     ack_number = sess.receive_next,
                     control_flags = TCP_SYN|TCP_ACK,
                 },
-                color = COLOR_SYNACK,
+                color = &COLOR_SYNACK,
             })
 
             sess.send_unacknowledged = sess.initial_send_seq_num
@@ -159,7 +159,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         sequence_number = p.tcp.ack_number,
                         control_flags = TCP_RST,
                     },
-                    color = COLOR_RST,
+                    color = &COLOR_RST,
                 })
                 return
             }
@@ -203,7 +203,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         ack_number = sess.receive_next,
                         control_flags = TCP_ACK,
                     },
-                    color = COLOR_ACK,
+                    color = &COLOR_ACK,
                 })
 
                 // TODO!
@@ -227,7 +227,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         ack_number = sess.receive_next,
                         control_flags = TCP_SYN|TCP_ACK,
                     },
-                    color = COLOR_SYNACK,
+                    color = &COLOR_SYNACK,
                 })
 
                 sess.send_window = p.tcp.window
@@ -299,7 +299,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     ack_number = sess.receive_next,
                     control_flags = TCP_ACK,
                 },
-                color = COLOR_ACK,
+                color = &COLOR_ACK,
             })
             return
         }
@@ -353,7 +353,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         ack_number = sess.receive_next,
                         control_flags = TCP_ACK,
                     },
-                    color = COLOR_ACK,
+                    color = &COLOR_ACK,
                 })
                 return
             }
@@ -385,7 +385,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         sequence_number = p.tcp.ack_number,
                         control_flags = TCP_RST,
                     },
-                    color = COLOR_RST,
+                    color = &COLOR_RST,
                 })
             }
         }
@@ -425,7 +425,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         ack_number = sess.receive_next,
                         control_flags = TCP_ACK,
                     },
-                    color = COLOR_ACK,
+                    color = &COLOR_ACK,
                 })
                 return false
             }
@@ -452,7 +452,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     control_flags = TCP_ACK,
                     window = sess.receive_window,
                 },
-                color = COLOR_ACK,
+                color = &COLOR_ACK,
             })
         }
 

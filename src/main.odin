@@ -342,7 +342,7 @@ tick :: proc() {
 					sequence_number = iss,
 					control_flags = TCP_SYN,
 				},
-				color = COLOR_SYN,
+				color = &COLOR_SYN,
 			}
 			send_packet(nodes_by_name["me"], hello_discord)
 
@@ -364,6 +364,7 @@ tick :: proc() {
 						control_flags = TCP_ACK,
 						window = 10, // excellent choice of window
 					},
+					color = &text_color,
 				}
 				send_packet(nodes_by_name["me"], p)
 				sess.send_next += u32(len(p.data))
@@ -666,7 +667,8 @@ generate_random_packet :: proc() {
 	send_packet(&nodes[src_id], Packet{
 		src_ip = nodes[src_id].interfaces[0].ip,
 		dst_ip = nodes[dst_id].interfaces[0].ip,
-		color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
+		color = &text_color,
+		//color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
 	})
 }
 
