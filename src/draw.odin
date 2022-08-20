@@ -10,19 +10,6 @@ packets_per_row: int : 5
 
 buffer_spacing :: (node_size - 2*packet_size_in_buffer) / f32(packets_per_row-1)
 
-scaled_rect :: proc(x, y, width, height, radius, r, g, b, a: f32) {
-	canvas_rect((x * scale) + pan.x, (y * scale) + pan.y, width * scale, height * scale, radius * scale, r, g, b, a)
-}
-scaled_circle :: proc(x, y, size, r, g, b, a: f32) {
-	canvas_circle((x * scale) + pan.x, (y * scale) + pan.y, size * scale, r, g, b, a)
-}
-scaled_line :: proc(x1, y1, x2, y2, r, g, b, a, width: f32) {
-	canvas_line((x1 * scale) + pan.x, (y1 * scale) + pan.y, (x2 * scale) + pan.x, (y2 * scale) + pan.y, r, g, b, a, width * scale)
-}
-scaled_text :: proc(text: string, x, y, r, g, b, a: f32) {
-	canvas_text(text, (x * scale) + pan.x, (y * scale) + pan.y, r, g, b, a, scale)
-}
-
 pos_in_buffer :: proc(n: ^Node, i: int) -> Vec2 {
     rect := buffer_rect(n)
     

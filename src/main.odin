@@ -29,17 +29,23 @@ max_width   : f32 = 0
 max_height  : f32 = 0
 text_height : f32 = 16
 
-bg_color     := Vec3{}
-text_color   := Vec3{}
-text_color2  := Vec3{}
-button_color := Vec3{}
-line_color   := Vec3{}
-graph_color  := Vec3{}
-node_color   := Vec3{}
+bg_color      := Vec3{}
+text_color    := Vec3{}
+text_color2   := Vec3{}
+button_color  := Vec3{}
+line_color    := Vec3{}
+graph_color   := Vec3{}
+node_color    := Vec3{}
+toolbar_color := Vec3{}
+
+default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
+monospace_font := `monospace`
+icon_font      := `FontAwesome`
 
 scale        : f32 = 1
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
+clicked_pos    := Vec2{}
 pan            := Vec2{}
 scroll_velocity: f32 = 0
 is_mouse_down := false
@@ -47,9 +53,10 @@ clicked := false
 
 node_selected := -1
 
-pad_size     : f32 = 40
-buffer_size  : int = 15
-history_size : int = 50
+pad_size       : f32 = 40
+toolbar_height : f32 = 40
+buffer_size    : int = 15
+history_size   : int = 50
 running := false
 
 TICK_INTERVAL_BASE :: 0.7
@@ -76,21 +83,23 @@ set_timescale :: proc(new_timescale: f32) {
 @export
 set_color_mode :: proc "contextless" (is_dark: bool) {
 	if is_dark {
-		bg_color     = Vec3{15, 15, 15}
-		text_color   = Vec3{255, 255, 255}
-		text_color2  = Vec3{180, 180, 180}
-		button_color = Vec3{40, 40, 40}
-		line_color   = Vec3{120, 120, 120}
-		node_color   = Vec3{180, 180, 180}
-		graph_color  = Vec3{180, 180, 180}
+		bg_color      = Vec3{15, 15, 15}
+		text_color    = Vec3{255, 255, 255}
+		text_color2   = Vec3{180, 180, 180}
+		button_color  = Vec3{40, 40, 40}
+		line_color    = Vec3{120, 120, 120}
+		node_color    = Vec3{180, 180, 180}
+		graph_color   = Vec3{180, 180, 180}
+		toolbar_color = Vec3{120, 120, 120}
 	} else {
-		bg_color     = Vec3{254, 252, 248}
-		text_color   = Vec3{0, 0, 0}
-		text_color2  = Vec3{80, 80, 80}
-		button_color = Vec3{200, 200, 200}
-		line_color   = Vec3{219, 211, 205}
-		node_color   = Vec3{129, 100, 80}
-		graph_color  = Vec3{69, 49, 34}
+		bg_color      = Vec3{254, 252, 248}
+		text_color    = Vec3{0, 0, 0}
+		text_color2   = Vec3{80, 80, 80}
+		button_color  = Vec3{161, 139, 124}
+		line_color    = Vec3{219, 211, 205}
+		node_color    = Vec3{129, 100, 80}
+		graph_color   = Vec3{69, 49, 34}
+		toolbar_color = Vec3{219, 211, 205}
 	}
 }
 
@@ -149,7 +158,7 @@ main :: proc() {
 	}
 	max_width += node_size + pad_size
 	max_height += node_size + pad_size
-	pan = Vec2{pad_size, pad_size}
+	pan = Vec2{pad_size, pad_size + toolbar_height}
 }
 
 tick :: proc() {	
@@ -407,6 +416,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	if !was_mouse_down && is_mouse_down {
 		clicked = true
+		clicked_pos = mouse_pos
 	}
 	defer was_mouse_down = is_mouse_down
 	defer clicked = false
@@ -425,19 +435,18 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// compute pan
 	pan_velocity := Vec2{}
 	if is_mouse_down {
-		if mouse_pos.x < width || mouse_pos.x > 0 {
+		if clicked_pos.x < max_width && clicked_pos.x > 0 && clicked_pos.y < height && clicked_pos.y > toolbar_height {
 			pan_velocity.x = mouse_pos.x - last_mouse_pos.x
-		}
-		if mouse_pos.y < height || mouse_pos.y > 0 {
 			pan_velocity.y = mouse_pos.y - last_mouse_pos.y
 		}
 		last_mouse_pos = mouse_pos
 	}
-	pan += pan_velocity
+	pan += 3 * pan_velocity
 
 	if running && t - last_tick_t >= tick_interval {
 		tick()
 	}
+
 
     canvas_clear()
     draw_rect(rect(0, 0, width, height), 0, bg_color)
@@ -455,15 +464,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	for node in &nodes {
     	scaled_rect(node.pos.x, node.pos.y, node_size, node_size, 5, node_color.x, node_color.y, node_color.z, 255)
 
-		// Draw interface IPs
-		// ip_pad : f32 = 5 
-		// ip_offset : f32 = 16
-		// for interface, i in node.interfaces {
-		// 	scaled_text(ip_to_str(interface.ip), node.pos.x, node.pos.y + node_size + ip_pad + (ip_offset * f32(i)), 0, 0, 0, 255)
-		// }
-
 		// Draw label
-		scaled_text(node.name, node.pos.x, node.pos.y - 16, text_color.x, text_color.y, text_color.z, 255)
+		scaled_text(node.name, node.pos.x, node.pos.y - 16, default_font, text_color.x, text_color.y, text_color.z, 255)
 
 		// Draw ???
 		// if queue.len(node.buffer) > 0 {
@@ -523,11 +525,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 	}
 
+	// Render toolbar
+    draw_rect(rect(0, 0, width, toolbar_height), 0, toolbar_color)
+
 	// Render menu view
-    draw_rect(rect(max_width + pad_size, 0, width, height), 0, bg_color)
+    draw_rect(rect(max_width + pad_size, toolbar_height, width, height), 0, bg_color)
 
 	// draw menu border
-	draw_line(Vec2{max_width + pad_size, 0}, Vec2{max_width + pad_size, height}, 3, line_color)
+	draw_line(Vec2{max_width + pad_size, toolbar_height}, Vec2{max_width + pad_size, height}, 3, line_color)
 
 	menu_offset := max_width + (pad_size * 2)
 
@@ -549,15 +554,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			return res
 		}
 
-		y = pad_size
-		draw_text("Node Inspector", Vec2{menu_offset, next_line(&y)}, 1, text_color)
-		draw_text(fmt.tprintf("Name: %s", inspect_node.name), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
-		draw_text(fmt.tprintf("Sent: %d", inspect_node.sent), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
-		draw_text(fmt.tprintf("Received: %d", inspect_node.received), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
-		draw_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		y = pad_size + toolbar_height
+		draw_text("Node Inspector", Vec2{menu_offset, next_line(&y)}, 1, default_font, text_color)
+		draw_text(fmt.tprintf("Name: %s", inspect_node.name), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		draw_text(fmt.tprintf("Sent: %d", inspect_node.sent), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		draw_text(fmt.tprintf("Received: %d", inspect_node.received), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		draw_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		buffer_used := min(buffer_size, queue.len(inspect_node.buffer))
-		draw_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		draw_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		average_packet_ticks : u32 = 0
 		average_packet_ttl   : u32 = 0
@@ -573,11 +578,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			average_packet_ttl /= u32(node_packet_count)
 		}
 
-		draw_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
-		draw_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, text_color2)
+		draw_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		draw_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		// render history graph
-		graph_top := ((text_height + 4) * 7) + (pad_size * 2)
+		graph_top := next_line(&y) + pad_size
 		graph_size : f32 = 200
 		graph_gap : f32 = (text_height + 4) * 2
 		draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, menu_offset, graph_top, graph_size)
@@ -589,50 +594,54 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		{
 			logs_left: f32 = menu_offset + 500
 
-			y = pad_size
-			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, text_color)
+			y = pad_size + toolbar_height
+			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
 			for sess in inspect_node.tcp_sessions {
 				if sess.ip == 0 {
 					continue
 				}
-				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  State: %v", sess.state), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  SND.UNA: %v", sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  SND.NXT: %v", sess.send_next), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  SND.WND: %v", sess.send_window), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  ISS: %v", sess.initial_send_seq_num), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  RCV.NXT: %v", sess.receive_next), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  RCV.WND: %v", sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, text_color)
-				draw_text(fmt.tprintf("  IRS: %v", sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  State: %v", sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  SND.UNA: %v", sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  SND.NXT: %v", sess.send_next), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  SND.WND: %v", sess.send_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  ISS: %v", sess.initial_send_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  RCV.NXT: %v", sess.receive_next), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  RCV.WND: %v", sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  IRS: %v", sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 
 			next_line(&y)
 
-			log_lines := 50
-			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, text_color)
+			log_lines := int((height - (pad_size * 2) - y) / (text_height + 4))
+			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
 			if len(inspect_node.logs) > log_lines {
-				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 			for msg in inspect_node.logs[max(0, len(inspect_node.logs)-log_lines):] {
-				draw_text(msg, Vec2{logs_left, next_line(&y)}, 1, text_color)
+				draw_text(msg, Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 		}
 	}
 
-	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*0}, packet_size, COLOR_SYN)
-	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*1}, packet_size, COLOR_ACK)
-	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*2}, packet_size, COLOR_SYNACK)
-	draw_circle(Vec2{20 + packet_size, 20+packet_size+20*3}, packet_size, COLOR_RST)
-	draw_text("SYN",    Vec2{38, 20+20*0}, 1, text_color)
-	draw_text("ACK",    Vec2{38, 20+20*1}, 1, text_color)
-	draw_text("SYNACK", Vec2{38, 20+20*2}, 1, text_color)
-	draw_text("RST",    Vec2{38, 20+20*3}, 1, text_color)
+	top_pad := toolbar_height + 20
+	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*0}, packet_size, COLOR_SYN)
+	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*1}, packet_size, COLOR_ACK)
+	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*2}, packet_size, COLOR_SYNACK)
+	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*3}, packet_size, COLOR_RST)
+	draw_text("SYN",    Vec2{38, top_pad+20*0}, 1, default_font, text_color)
+	draw_text("ACK",    Vec2{38, top_pad+20*1}, 1, default_font, text_color)
+	draw_text("SYNACK", Vec2{38, top_pad+20*2}, 1, default_font, text_color)
+	draw_text("RST",    Vec2{38, top_pad+20*3}, 1, default_font, text_color)
 
-	if button(rect(20, 100, 70, 30), running ? "STOP" : "START") {
+	edge_pad : f32 = 10
+	button_height : f32 = 30
+	button_width  : f32 = 30
+	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), running ? "\uf04c" : "\uf04b", icon_font) {
 		running = !running
 	}
 	if !running {
-		if button(rect(20, 140, 70, 30), "STEP") {
+		if button(rect(edge_pad + button_width + 8, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
 			tick()
 		}
 	}
@@ -688,11 +697,11 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 }
 
 draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
-	char_width : f32 = 6.35
 	line_width : f32 = 1
 
-	center_offset := (size / 2) - ((f32(len(header)) * char_width) / 2)
-	draw_text(header, Vec2{x + center_offset, y}, 1, text_color2)
+	text_width := measure_text(header, 1, default_font)
+	center_offset := (size / 2) - (text_width / 2)
+	draw_text(header, Vec2{x + center_offset, y}, 1, default_font, text_color2)
 
 	graph_top := y + text_height + 4
 	draw_line(Vec2{x, graph_top}, Vec2{x + size, graph_top}, 3, line_color)
@@ -755,10 +764,11 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
 }
 
-button :: proc(rect: Rect, text: string) -> bool {
+button :: proc(rect: Rect, text: string, font: string) -> bool {
 	draw_rect(rect, 2, button_color)
-	text_width := measure_text(text, 1)
-	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+10}, 1, text_color)
+	text_width := measure_text(text, 1, font)
+	font_height : f32 = 16
+	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(font_height / 2)}, 1, font, text_color)
 	if clicked && pt_in_rect(mouse_pos, rect) {
 		return true
 	}

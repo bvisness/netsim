@@ -7,6 +7,7 @@
 
 	<script src="runtime.js"></script>
 
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
 	<link rel="stylesheet" href="normalize.css">
 	<style>
 		* {
@@ -85,12 +86,14 @@
 
 		let dpr;
 		let textHeight;
-		let cached_font_size = -1;
+		let cached_font = "";
 
-		function updateFontSize(size) {
-			if (size !== cached_font_size) {
-				ctx.font = `${14 * dpr * size}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
-				cached_font_size = size;
+		function updateFont(size, font) {
+			let font_str = `${14 * dpr * size}px ${font}`;
+			if (font_str !== cached_font) {
+				ctx.font = font_str;
+				cached_font = font_str;
+				console.log(`setting font to ${font_str}`)
 			}
 		}
 
@@ -139,9 +142,10 @@
 						ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha/255})`;
 						ctx.fill();
 					},
-					canvas_text(strP, strLen, x, y, r, g, b, a, size) {
+					canvas_text(strP, strLen, x, y, r, g, b, a, size, f, flen) {
 						const str = window.wasm.odinMem.loadString(strP, strLen);
-						updateFontSize(size);
+						const font = window.wasm.odinMem.loadString(f, flen);
+						updateFont(size, font);
 
 						ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
 						ctx.fillText(str, x * dpr, y * dpr);
@@ -172,9 +176,10 @@
 						ctx.lineWidth = strokeWidth * dpr;
 						ctx.stroke();
 					},
-					measure_text: (p, len, size) => {
+					measure_text: (p, len, size, f, flen) => {
 						const str = window.wasm.odinMem.loadString(p, len);
-						updateFontSize(size);
+						const font = window.wasm.odinMem.loadString(f, flen);
+						updateFont(size, font);
 						const metrics = ctx.measureText(str);
 
 						return metrics.width / dpr;
@@ -326,6 +331,10 @@
 				e.preventDefault();
 				let x = e.deltaX;
 				let y = e.deltaY;
+
+				if (e.webkitDirectionInvertedFromDevice) {
+					y = -y;
+				}
 
 				if (e.deltaMode === 1) {
 					// "lines"
