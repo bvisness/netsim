@@ -7,6 +7,7 @@ import "core:math"
 import "core:math/rand"
 import "core:mem"
 import "core:runtime"
+import "core:slice"
 import "core:strings"
 import "vendor:wasm/js"
 
@@ -162,14 +163,26 @@ tick :: proc() {
 	}
 	packet_sends := make([dynamic]PacketSend, context.temp_allocator)
 
+	NodeAndID :: struct {
+		n: ^Node,
+		id: int,
+	}
+	nodes_shuffled := make([]NodeAndID, len(nodes))
 	for node, node_id in &nodes {
+		nodes_shuffled[node_id] = NodeAndID{n = &node, id = node_id}
+	}
+	rand.shuffle(nodes_shuffled)
+	for entry in nodes_shuffled {
+		node := entry.n
+		node_id := entry.id
+
 		// Update packet animation data (for everything but the top one, which will be popped)
 		for i := 1; i < queue.len(node.buffer); i += 1 {
 			packet := queue.get_ptr(&node.buffer, i)
 			packet.anim = PacketAnimation.None
-			packet.src_node = &node
+			packet.src_node = node
 			packet.src_bufid = i
-			packet.dst_node = &node
+			packet.dst_node = node
 			packet.dst_bufid = i - 1
 
 			packet.tick_life += 1
@@ -213,10 +226,10 @@ tick :: proc() {
 			if is_for_me {
 				// fmt.printf("Node %d: thank you for the packet in these trying times\n", node_id)
 
-				handle_packet(&node, packet)
+				handle_packet(node, packet)
 
 				packet.anim = PacketAnimation.Delivered
-				packet.dst_node = &node
+				packet.dst_node = node
 				packet.delivered_t = t
 				append(&exiting_packets, packet)
 				continue
@@ -229,11 +242,10 @@ tick :: proc() {
 				// fmt.printf("%s & %s (%s) == %s?\n", ip_to_str(packet.dst_ip), ip_to_str(rule.subnet_mask), ip_to_str(masked_dest), ip_to_str(rule.ip))
 				if masked_dest == rule.ip {
 					if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
-
 						packet.ttl += 1
 						append(&packet_sends, PacketSend{
 							packet = packet,
-							src = &node,
+							src = node,
 							dst = dst_node,
 						})
 						// fmt.printf("Node %d: here have packet!!\n", node_id)
