@@ -71,6 +71,14 @@ class WasmMemoryInterface {
 		const bytes = this.loadBytes(ptr, len);
 		return new TextDecoder("utf-8").decode(bytes);
 	}
+	putString(ptr, str) {
+		const buf = new Uint8Array(this.memory.buffer);
+		let i = 0;
+		for (; i < str.length; i++) {
+			buf[ptr + i] = str.charCodeAt(i);
+		}
+		buf[ptr + i] = 0;
+	}
 
 	storeU8(addr, value)  { this.mem.setUint8  (addr, value, true); }
 	storeI8(addr, value)  { this.mem.setInt8   (addr, value, true); }

@@ -304,8 +304,8 @@
 					|| e.code == 'KeyA'
 					|| e.code == 'KeyZ'
 				) {
-					putString(window.wasm.textInputBuf, e.key);
-					putString(window.wasm.keyCodeBuf, e.code);
+					window.wasm.odinMem.putString(window.wasm.textInputBuf, e.key);
+					window.wasm.odinMem.putString(window.wasm.keyCodeBuf, e.code);
 					window.wasm.text_input(...str(e.key), ...str(e.code));
 					e.preventDefault();
 				}
@@ -319,7 +319,7 @@
 			});
 
 			window.addEventListener('paste', e => {
-				putString(
+				window.wasm.odinMem.putString(
 					window.wasm.textInputBuf,
 					e.clipboardData.getData('text/plain')
 				);

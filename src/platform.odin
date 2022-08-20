@@ -2,6 +2,7 @@ package main
 
 import "core:mem"
 import "core:runtime"
+import "core:fmt"
 
 @export
 mouse_move :: proc "contextless" (x, y: int) {
@@ -29,13 +30,15 @@ scroll :: proc "contextless" (x, y: int) {
 }
 
 @export
-key_down :: proc "contextless" (key: int) {}
+key_down :: proc "contextless" (key: int) {
+}
 
 @export
 key_up :: proc "contextless" (key: int) {}
 
 @export
-text_input :: proc "contextless" () {}
+text_input :: proc "contextless" (key, code: string) {
+}
 
 @export
 blur :: proc "contextless" () {}
