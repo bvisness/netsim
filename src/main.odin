@@ -698,6 +698,16 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 
 draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
 	line_width : f32 = 1
+	graph_edge_pad : f32 = 15
+
+	max_val : u32 = 0
+	min_val : u32 = 100
+	for i := 0; i < queue.len(history^); i += 1 {
+		entry := queue.get(history, i)
+		max_val = max(max_val, entry)
+		min_val = min(min_val, entry)
+	}
+	max_range := max_val - min_val
 
 	text_width := measure_text(header, 1, default_font)
 	center_offset := (size / 2) - (text_width / 2)
@@ -709,16 +719,19 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	draw_line(Vec2{x + size, graph_top}, Vec2{x + size, graph_top + size}, 3, line_color)
 	draw_line(Vec2{x, graph_top + size}, Vec2{x + size, graph_top + size}, 3, line_color)
 
-	max_val : u32 = 0
-	min_val : u32 = 100000
-	for i := 0; i < queue.len(history^); i += 1 {
-		entry := queue.get(history, i)
-		max_val = max(max_val, entry)
-		min_val = min(min_val, entry)
-	}
-	max_range := max_val - min_val
+	draw_line(Vec2{x - 5, graph_top + size - graph_edge_pad}, Vec2{x + 5, graph_top + size - graph_edge_pad}, 1, graph_color)
+	draw_line(Vec2{x - 5, graph_top + graph_edge_pad}, Vec2{x + 5, graph_top + graph_edge_pad}, 1, graph_color)
 
-	graph_edge_pad : f32 = 15
+	if queue.len(history^) > 1 {
+		high_str := fmt.tprintf("%d", max_val)
+		high_width := measure_text(high_str, 1, default_font) + 3
+		draw_text(high_str, Vec2{(x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color2)
+
+		low_str := fmt.tprintf("%d", min_val)
+		low_width := measure_text(low_str, 1, default_font) + 3
+		draw_text(low_str, Vec2{(x - 5) - low_width, graph_top + size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color2)
+	}
+
 	graph_y_bounds := size - (graph_edge_pad * 2)
 	graph_x_bounds := size - graph_edge_pad
 
@@ -741,7 +754,7 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 		point_y := graph_top + size - point_y_offset - graph_edge_pad
 
 		if queue.len(history^) > 1  && i > 0 {
-			canvas_line(last_x, last_y, point_x, point_y, graph_color.x, graph_color.y, graph_color.z, 255, line_width)
+			draw_line(Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)
 		}
 
 		last_x = point_x
