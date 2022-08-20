@@ -38,6 +38,10 @@ key_up :: proc "contextless" (key: int) {}
 
 @export
 text_input :: proc "contextless" (key, code: string) {
+	switch code {
+	case "Space":
+		running = !running
+	}
 }
 
 @export
