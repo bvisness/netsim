@@ -427,10 +427,12 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
 	defer free_all(context.temp_allocator)
-	defer first_frame = false
 
+	// This is nasty code that allows me to do load-time things once the wasm context is init
 	if first_frame {
+		rand.set_global_seed(u64(get_time()))
 		get_session_storage("muted")
+		first_frame = false
 	}
 
 	if !was_mouse_down && is_mouse_down {

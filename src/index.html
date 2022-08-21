@@ -221,6 +221,9 @@
 						let val = window.wasm.odinMem.loadString(v, vlen);
 
 						sessionStorage.setItem(key, val);
+					},
+					get_time() {
+						return Date.now();
 					}
 				},
 			});
