@@ -39,7 +39,7 @@ Node :: struct {
 	buffer: queue.Queue(Packet),
 
 	listening: bool,
-	tcp_sessions: [10]TcpSession,
+	tcp_sessions: [dynamic]TcpSession,
 }
 
 LogEntry :: struct {
@@ -185,6 +185,8 @@ make_node :: proc(
 		packets_per_tick = packets_per_tick,
 		max_buffer_size = max_buffer_size,
 	}
+
+	n.tcp_sessions = make([dynamic]TcpSession)
 
 	if ok := queue.init(&n.buffer, max_buffer_size); !ok {
 		fmt.println("Successfully failed to init packet queue.")

@@ -23,7 +23,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
     node_log(n, "Incoming packet:")
     node_log_tcp_packet(n, p)
 
-    sess, ok := get_tcp_session(n, p.src_ip)
+    sess_idx, ok := get_tcp_session(n, p.src_ip)
     if !ok && !n.listening {
         // CLOSED state (3.10.7.1)
 
@@ -84,11 +84,12 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
 
         // SYNs mean we're starting up a new connection.
         if p.tcp.control_flags&TCP_SYN != 0 {
-            sess, ok := new_tcp_session(n, p.src_ip)
+            sess_idx, ok := new_tcp_session(n, p.src_ip)
             if !ok {
                 // Out of resources! Die.
                 return
             }
+			sess := &n.tcp_sessions[sess_idx]
 
             // No security concerns here.
 
@@ -126,6 +127,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // it will probably happen a lot :)
         return
     }
+	sess := &n.tcp_sessions[sess_idx]
 
     // Now, on to the actual session states...
     assert(sess != nil)
@@ -172,7 +174,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 // That means the RST was intended for us and we should close
                 // our connection.
                 node_log(n, "Got a RST while handshaking. Closing connection.")
-                close_tcp_session(sess)
+                close_tcp_session(n, sess_idx)
             }
             return
         }
@@ -324,7 +326,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
             // There is some nuance in the spec about how to handle the various
             // types of connection closes and resets. We don't care.
             node_log(n, "Got a RST while established; closing connection.")
-            close_tcp_session(sess)
+            close_tcp_session(n, sess_idx)
             return
         }
 
@@ -336,7 +338,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 // We're still handshaking, already received a SYN, and now we
                 // got another SYN. Just bail.
                 node_log(n, "Got an extra SYN while handshaking. Giving up.")
-                close_tcp_session(sess)
+                close_tcp_session(n, sess_idx)
                 return
             } else {
                 // Receiving a SYN while we are already synchronized could mean
@@ -482,31 +484,31 @@ send_packet :: proc(n: ^Node, p: Packet) {
     node_log_tcp_packet(n, p)
 }
 
-get_tcp_session :: proc(n: ^Node, ip: u32) -> (^TcpSession, bool) {
-    for sess in &n.tcp_sessions {
+get_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
+    for sess, idx in &n.tcp_sessions {
         if sess.ip == ip {
-            return &sess, true
+            return idx, true
         }
     }
-    return nil, false
+    return 0, false
 }
 
-new_tcp_session :: proc(n: ^Node, ip: u32) -> (^TcpSession, bool) {
-    if existing, ok := get_tcp_session(n, ip); ok {
-        existing^ = TcpSession{ip = ip}
-        return existing, true
+new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
+    if existing_idx, ok := get_tcp_session(n, ip); ok {
+		n.tcp_sessions[existing_idx] = TcpSession{ip = ip}
+        return existing_idx, true
     }
-    for sess in &n.tcp_sessions {
-        if sess.ip == 0 {
-            (&sess)^ = TcpSession{ip = ip}
-            return &sess, true
-        }
-    }
-    return nil, false
+
+	if len(n.tcp_sessions) >= 10 {
+		return 0, false
+	}
+
+	append(&n.tcp_sessions, TcpSession{ip = ip})
+	return len(n.tcp_sessions) - 1, true
 }
 
-close_tcp_session :: proc(sess: ^TcpSession) {
-    sess^ = TcpSession{}
+close_tcp_session :: proc(n: ^Node, sess_idx: int) {
+	unordered_remove(&n.tcp_sessions, sess_idx)
 }
 
 node_log_tcp_packet :: proc(n: ^Node, p: Packet) {

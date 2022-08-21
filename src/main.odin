@@ -324,9 +324,11 @@ tick :: proc() {
 
 	if tick_count % 1 == 0 {
 		dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
-		if sess, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
-			sess, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
+		if sess_idx, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
+			sess_idx, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
 			assert(ok)
+
+			sess := &nodes_by_name["me"].tcp_sessions[sess_idx]
 
 			// HACK: Open up destination for listening
 			dst := nodes_by_name["discord_1"]
@@ -351,6 +353,8 @@ tick :: proc() {
 
 			sess.state = TcpState.SynSent
 		} else {
+			sess := &nodes_by_name["me"].tcp_sessions[sess_idx]
+
 			if sess.state == TcpState.Established {
 				// send le data
 				p := Packet{
@@ -631,7 +635,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 
 		// render logs and debug info
-		{
+		if len(inspect_node.tcp_sessions) > 0 {
 			logs_left: f32 = menu_offset + 500
 			logs_height: f32 = 1000
 			logs_width: f32 = 600
@@ -639,20 +643,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			y = pad_size + toolbar_height
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 
-			got_session := false
 			for sess in inspect_node.tcp_sessions {
-				if sess.ip == 0 {
-					continue
-				}
 				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.send_next, sess.send_window, sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.receive_next, sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.initial_send_seq_num, sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-
-				got_session = true
-			}
-			if !got_session {
-				draw_text("None yet!", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 
 			next_line(&y)
