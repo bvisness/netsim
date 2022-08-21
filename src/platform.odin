@@ -7,6 +7,7 @@ import "core:fmt"
 @export
 set_text_height :: proc "contextless" (height: f32) {
 	text_height = height
+	line_gap = height + (height * (3/4))
 }
 
 @export

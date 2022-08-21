@@ -68,8 +68,8 @@ pad_size       : f32 = 40
 toolbar_height : f32 = 40
 history_size   : int = 50
 log_size       : int = 50
-text_height: f32 = 16
-line_gap   : f32 = 10
+text_height    : f32 = 0
+line_gap       : f32 = 0
 
 running := false
 
