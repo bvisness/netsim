@@ -561,7 +561,7 @@ tcp_tick :: proc(n: ^Node) {
             }
 
             cwnd_available := sess.cwnd_sent < sess.cwnd
-            if cwnd_available {
+            if !congestion_control_on || cwnd_available {
                 // Send the packet at the front of our send queue (or our retransmission queue...)
                 should_send: bool
                 is_retransmit: bool
@@ -700,7 +700,7 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
 
 	append(&n.tcp_sessions, TcpSession{
         ip = ip,
-        rcv_wnd = 200, // TODO(ben): This is arbitrary for now!
+        rcv_wnd = 100, // TODO(ben): This is arbitrary for now!
         cwnd = 2*SEG_SIZE, // Start small so we can see slow start.
         received_data = strings.builder_make(),
     })

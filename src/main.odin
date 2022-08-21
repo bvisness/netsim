@@ -69,6 +69,7 @@ hash := 0
 first_frame := true
 muted := false
 running := false
+congestion_control_on := true
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
@@ -652,7 +653,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, graph_pos + next_graph_offset(&gi, &y))
 			draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, graph_pos + next_graph_offset(&gi, &y))
 			for sess, i in &inspect_node.tcp_sessions {
-				draw_graph(fmt.tprintf("Session %d Congestion Window", i+1), &sess.cwnd_history, graph_pos + next_graph_offset(&gi, &y))
+				if congestion_control_on {
+					draw_graph(fmt.tprintf("Session %d Congestion Window", i+1), &sess.cwnd_history, graph_pos + next_graph_offset(&gi, &y))
+				}
 				draw_graph(fmt.tprintf("Session %d Retransmit Queue", i+1), &sess.retransmit_history, graph_pos + next_graph_offset(&gi, &y))
 			}
 			next_line(&y)
@@ -825,6 +828,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_text("SYNACK", Vec2{38, top_pad+20*2}, 1, default_font, text_color)
 	draw_text("RST",    Vec2{38, top_pad+20*3}, 1, default_font, text_color)
 	draw_text("DATA",   Vec2{38, top_pad+20*4}, 1, default_font, text_color)
+
+	cc_btn_text := congestion_control_on ? "Congestion Control ON" : "Congestion Control OFF"
+	if button(rect(20, top_pad+20*5, 180, 30), cc_btn_text, default_font) {
+		congestion_control_on = !congestion_control_on
+	}
 
 	// draw toolbar
 	edge_pad : f32 = 10
