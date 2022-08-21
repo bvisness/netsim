@@ -11,6 +11,33 @@ Rect :: struct {
 	size: Vec2,
 }
 
+InputField :: struct {
+	has_focus: bool,
+	cursor: int,
+	alpha: f32,
+	buffer: [1024]u8,
+	max_size: int,
+}
+
+make_input_field :: proc(max_size: int) -> InputField {
+	return InputField {
+		has_focus = false,
+		cursor = 0,
+		alpha = 255,
+		max_size = max_size,
+	}
+}
+
+get_current_field :: proc() -> (int, bool) {
+	for input, idx in &inputs {
+		if input.has_focus {
+			return idx, true
+		}
+	}
+
+	return 0, false
+}
+
 Node :: struct {
 	logs: queue.Queue(LogEntry), // DO NOT MOVE ELSEWHERE IN THE STRUCT
 

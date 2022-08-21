@@ -19,6 +19,7 @@ wasmContext := runtime.default_context()
 nodes : [dynamic]Node
 conns : [dynamic]Connection
 exiting_packets : [dynamic]Packet
+inputs: [dynamic]InputField
 
 nodes_by_name : map[string]^Node
 
@@ -47,6 +48,7 @@ monospace_font := `monospace`
 icon_font      := `FontAwesome`
 
 scale          : f32
+
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
@@ -73,6 +75,7 @@ history_size   : int = 50
 log_size       : int = 50
 text_height    : f32 = 0
 line_gap       : f32 = 0
+
 
 TICK_INTERVAL_BASE :: 0.7
 TICK_ANIM_DURATION_BASE :: 0.7
@@ -184,6 +187,10 @@ init_state :: proc() {
 	max_width += node_size + pad_size
 	max_height += node_size + pad_size
 	pan = Vec2{pad_size, pad_size + toolbar_height}
+
+	append(&inputs, make_input_field(15))
+	append(&inputs, make_input_field(15))
+	append(&inputs, make_input_field(15))
 	
 	node_selected = -1
 }
@@ -498,12 +505,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// check intersections
 	for node, idx in &nodes {
 		if pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
-			change_cursor("pointer")
+			set_cursor("pointer")
 			if clicked {
 				node_selected = idx
 			}
-
-			is_hovering = true
 			break
 		}
 	}
@@ -661,8 +666,24 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			draw_text("Routing Rules:", Vec2{rule_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 
 			ip_str_chunk := "255.255.255.255"
+			max_width : f32 = 0
 			for rule in inspect_node.routing_rules {
-				draw_text(fmt.tprintf("IP: %*s,   Subnet: %*s, NIC: %d", len(ip_str_chunk), ip_to_str(rule.ip), len(ip_str_chunk), ip_to_str(rule.subnet_mask), rule.interface_id + 1), Vec2{rule_left, next_line(&y)}, 1, monospace_font, text_color2)
+				line := fmt.tprintf("IP: %*s,   Subnet: %*s, NIC: %d", len(ip_str_chunk), ip_to_str(rule.ip), len(ip_str_chunk), ip_to_str(rule.subnet_mask), rule.interface_id + 1)
+				width := measure_text(line, 1, monospace_font)
+				max_width = max(max_width, width)
+				draw_text(line, Vec2{rule_left, next_line(&y)}, 1, monospace_font, text_color2)
+			}
+
+			next_line(&y)
+
+			field_width := measure_text(ip_str_chunk, 1, monospace_font) + 9
+
+			box_height := (text_height * 3)
+			draw_input(rect(rule_left, y, field_width, box_height), 0)
+			draw_input(rect(rule_left + field_width + 5, y, field_width, box_height), 1)
+			draw_input(rect(rule_left + ((field_width + 5) * 2), y, field_width, box_height), 2)
+			if button(rect(rule_left + ((field_width + 5) * 3), y, box_height, box_height), "+", monospace_font) {
+				fmt.printf("Toast!\n")
 			}
 		}
 
@@ -766,7 +787,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	if !is_hovering {
-		change_cursor("auto")
+		reset_cursor()
 	}
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
@@ -821,6 +842,38 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 	scaled_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
 	packet.last_pos = packet.pos
 	packet.pos = pos
+}
+
+draw_input :: proc(r: Rect, infield_idx: int) {
+	infield := &inputs[infield_idx]
+
+	outline_width : f32 = 1
+	draw_rect_outline(rect(r.pos.x - outline_width, r.pos.y - outline_width, r.size.x + outline_width, r.size.y + outline_width), outline_width, outline_color)
+
+	if pt_in_rect(mouse_pos, r) {
+		set_cursor("text")
+	}
+	if clicked {
+		if pt_in_rect(mouse_pos, r) {
+			infield.has_focus = true
+		} else {
+			infield.has_focus = false
+		}
+	}
+
+	draw_rect(r, 1, bg_color2)
+
+	text := strings.string_from_ptr(slice.as_ptr(infield.buffer[:]), infield.cursor)
+	text_width := measure_text(text, 1, monospace_font)
+	draw_text(text, Vec2{r.pos.x + 4, r.pos.y + ((text_height + 5) / 2)}, 1, monospace_font, text_color2)
+
+	if infield.has_focus {
+		infield.alpha -= 1.35
+		if infield.alpha < 1 {
+			infield.alpha = 255
+		}
+		draw_line(Vec2{r.pos.x + 4 + text_width + 2, r.pos.y}, Vec2{r.pos.x + 4 + text_width + 2, r.pos.y + r.size.y}, 1, text_color, infield.alpha)
+	}
 }
 
 draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
@@ -905,16 +958,14 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 button :: proc(rect: Rect, text: string, font: string) -> bool {
 	draw_rect(rect, 3, button_color)
 	text_width := measure_text(text, 1, font)
-	font_height : f32 = 16
-	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(font_height / 2)}, 1, font, text_color)
+	text_height := get_text_height(1, font)
+	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(text_height / 2)}, 1, font, text_color)
 
 	if pt_in_rect(mouse_pos, rect) {
-		change_cursor("pointer")
+		set_cursor("pointer")
 		if clicked {
 			return true
 		}
-
-		is_hovering = true
 	}
 	return false
 }

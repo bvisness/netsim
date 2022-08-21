@@ -35,18 +35,70 @@ scroll :: proc "contextless" (x, y: int) {
 	scroll_velocity = f32(y)
 }
 
+shift_down := false
 @export
 key_down :: proc "contextless" (key: int) {
+	context = wasmContext
+
+	switch key {
+	case 1: // left-shift
+		shift_down = true
+	case 4096: // tab
+		if infield_idx, ok := get_current_field(); ok {
+			new_idx: int
+			if shift_down {
+				new_idx = (infield_idx - 1) %% len(inputs)
+			} else {
+				new_idx = (infield_idx + 1) %% len(inputs)
+			}
+
+			inputs[infield_idx].has_focus = false
+			inputs[new_idx].has_focus = true
+		}
+	case 8: // backspace
+		infield_idx, ok := get_current_field()
+		if ok {
+			infield := &inputs[infield_idx]
+			infield.cursor -= 1
+			infield.cursor = max(infield.cursor, 0)
+			infield.buffer[infield.cursor] = 0
+		}
+	}
 }
 
 @export
-key_up :: proc "contextless" (key: int) {}
+key_up :: proc "contextless" (key: int) {
+	switch key {
+	case 1: // left-shift
+		shift_down = false
+	}
+}
 
 @export
 text_input :: proc "contextless" (key, code: string) {
+	context = wasmContext
+
 	switch code {
 	case "Space":
-		running = !running
+		infield_idx, ok := get_current_field()
+		if ok {
+			infield := &inputs[infield_idx]
+			if infield.cursor < infield.max_size {
+				infield.buffer[infield.cursor] = key[0]
+				infield.cursor += 1
+			}
+		} else {
+			running = !running
+		}
+	case: // *should* be character keys
+		infield_idx, ok := get_current_field()
+		if ok {
+			infield := &inputs[infield_idx]
+			if infield.cursor < infield.max_size {
+				infield.buffer[infield.cursor] = key[0]
+				infield.cursor += 1
+			}
+		}
 	}
 }
 
@@ -84,6 +136,7 @@ foreign js {
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
     canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     measure_text :: proc(str: string, scale: f32, font: string) -> f32 ---
+    get_text_height :: proc(scale: f32, font: string) -> f32 ---
 
     debugger :: proc() ---
     log_string :: proc(str: string) ---
@@ -145,4 +198,13 @@ play_doot :: proc() {
 	tones := []f32{ 392, 440, 493.88, 523.25, 587.33, 659.25, 739.99 }
 	idx := rand_int(0, len(tones) - 1)
 	play_tone(tones[idx])
+}
+
+set_cursor :: proc(cursor: string) {
+	change_cursor(cursor)
+	is_hovering = true
+}
+
+reset_cursor :: proc() {
+	change_cursor("auto")
 }
