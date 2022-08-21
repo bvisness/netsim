@@ -118,17 +118,14 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 	}
 }
 
-main :: proc() {
-	global_data, _ := js.page_alloc(100)
-	temp_data, _ := js.page_alloc(100)
-    arena_init(&global_arena, global_data)
-    arena_init(&temp_arena, temp_data)
+reset_everything :: proc() {
+	free_all(context.allocator)
+	free_all(context.temp_allocator)
 
-    wasmContext.allocator = arena_allocator(&global_arena)
-    wasmContext.temp_allocator = arena_allocator(&temp_arena)
+	init_state()
+}
 
-    context = wasmContext
-
+init_state :: proc() {
 	set_timescale(0.4)
 
 	nodes = make([dynamic]Node)
@@ -174,12 +171,28 @@ main :: proc() {
 	max_width += node_size + pad_size
 	max_height += node_size + pad_size
 	pan = Vec2{pad_size, pad_size + toolbar_height}
+	
+	node_selected = -1
+	tick_count = 0
+}
+
+main :: proc() {
+	global_data, _ := js.page_alloc(100)
+	temp_data, _ := js.page_alloc(100)
+    arena_init(&global_arena, global_data)
+    arena_init(&temp_arena, temp_data)
+
+    wasmContext.allocator = arena_allocator(&global_arena)
+    wasmContext.temp_allocator = arena_allocator(&temp_arena)
+
+    context = wasmContext
+
+	init_state()
 }
 
 tick :: proc() {	
 	defer last_tick_t = t
 	defer tick_count += 1
-
 
 	PacketSend :: struct {
 		packet: Packet,
@@ -718,8 +731,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), running ? "\uf04c" : "\uf04b", icon_font) {
 		running = !running
 	}
+	if button(rect(edge_pad + button_width + button_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf0e2", icon_font) {
+		reset_everything()
+		running = false
+	}
 	if !running {
-		if button(rect(edge_pad + button_width + button_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
+		if button(rect(edge_pad + ((button_width + button_pad) * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
 			tick()
 		}
 	}

@@ -146,7 +146,7 @@ net_config := `
 		},
 		{
 			"name": "discord_1",
-			"pos": { "x": 750, "y": 450 },
+			"pos": { "x": 750, "y": 475 },
 			"interfaces": [ "5.5.100.1" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
@@ -162,7 +162,7 @@ net_config := `
 		},
 		{
 			"name": "discord_3",
-			"pos": { "x": 750, "y": 750 },
+			"pos": { "x": 750, "y": 725 },
 			"interfaces": [ "5.5.100.3" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
