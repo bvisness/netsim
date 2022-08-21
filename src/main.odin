@@ -137,6 +137,7 @@ init_state :: proc() {
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
 	exiting_packets = make([dynamic]Packet)
+	inputs = make([dynamic]InputField)
 
 	if ok := load_config(net_config, &nodes, &conns); !ok {
 		fmt.printf("Failed to load config!\n")
