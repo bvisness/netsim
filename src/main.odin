@@ -31,6 +31,7 @@ text_height : f32 = 16
 line_gap :    f32 = 3
 
 bg_color      := Vec3{}
+bg_color2     := Vec3{}
 text_color    := Vec3{}
 text_color2   := Vec3{}
 button_color  := Vec3{}
@@ -94,6 +95,7 @@ set_timescale :: proc(new_timescale: f32) {
 set_color_mode :: proc "contextless" (is_dark: bool) {
 	if is_dark {
 		bg_color      = Vec3{15, 15, 15}
+		bg_color2     = Vec3{0, 0, 0}
 		text_color    = Vec3{255, 255, 255}
 		text_color2   = Vec3{180, 180, 180}
 		button_color  = Vec3{40, 40, 40}
@@ -103,6 +105,7 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		toolbar_color = Vec3{120, 120, 120}
 	} else {
 		bg_color      = Vec3{254, 252, 248}
+		bg_color2     = Vec3{255, 255, 255}
 		text_color    = Vec3{0, 0, 0}
 		text_color2   = Vec3{80, 80, 80}
 		button_color  = Vec3{161, 139, 124}
@@ -607,7 +610,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// render logs and debug info
 		{
 			logs_left: f32 = menu_offset + 500
-			logs_size: f32 = 500
+			logs_height: f32 = 1000
+			logs_width: f32 = 600
 
 			y = pad_size + toolbar_height
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
@@ -623,8 +627,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			next_line(&y)
 
-			log_lines := 45
+			log_lines := 48
+			outline_width : f32 = 2
 			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
+			draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
+
+			draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, line_color)
+
+			logs_left += 5
+
 			if queue.len(inspect_node.logs) > log_lines {
 				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
@@ -758,10 +769,8 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	draw_text(header, Vec2{x + center_offset, y}, 1, default_font, text_color2)
 
 	graph_top := y + text_height + line_gap
-	draw_line(Vec2{x, graph_top}, Vec2{x + size, graph_top}, 3, line_color)
-	draw_line(Vec2{x, graph_top}, Vec2{x, graph_top + size}, 3, line_color)
-	draw_line(Vec2{x + size, graph_top}, Vec2{x + size, graph_top + size}, 3, line_color)
-	draw_line(Vec2{x, graph_top + size}, Vec2{x + size, graph_top + size}, 3, line_color)
+	draw_rect(rect(x, graph_top, size, size), 0, bg_color2)
+	draw_rect_outline(rect(x, graph_top, size, size), 2, line_color)
 
 	draw_line(Vec2{x - 5, graph_top + size - graph_edge_pad}, Vec2{x + 5, graph_top + size - graph_edge_pad}, 1, graph_color)
 	draw_line(Vec2{x - 5, graph_top + graph_edge_pad}, Vec2{x + 5, graph_top + graph_edge_pad}, 1, graph_color)
@@ -822,7 +831,7 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 }
 
 button :: proc(rect: Rect, text: string, font: string) -> bool {
-	draw_rect(rect, 2, button_color)
+	draw_rect(rect, 3, button_color)
 	text_width := measure_text(text, 1, font)
 	font_height : f32 = 16
 	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(font_height / 2)}, 1, font, text_color)

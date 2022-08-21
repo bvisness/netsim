@@ -99,6 +99,18 @@ draw_arc :: proc(center: Vec2, radius, angleStart, angleEnd: f32, strokeWidth: f
     canvas_arc(center.x, center.y, radius, angleStart, angleEnd, color.x, color.y, color.z, a, strokeWidth)
 }
 
+draw_rect_outline :: proc(rect: Rect, width: f32, color: Vec3, a: f32 = 255) {
+	x1 := rect.pos.x
+	y1 := rect.pos.y
+	x2 := rect.pos.x + rect.size.x
+	y2 := rect.pos.y + rect.size.y
+
+	draw_line(Vec2{x1, y1}, Vec2{x2, y1}, width, color, a)
+	draw_line(Vec2{x1, y1}, Vec2{x1, y2}, width, color, a)
+	draw_line(Vec2{x2, y1}, Vec2{x2, y2}, width, color, a)
+	draw_line(Vec2{x1, y2}, Vec2{x2, y2}, width, color, a)
+}
+
 scaled_rect :: proc(x, y, width, height, radius, r, g, b, a: f32) {
 	canvas_rect((x * scale) + pan.x, (y * scale) + pan.y, width * scale, height * scale, radius * scale, r, g, b, a)
 }
