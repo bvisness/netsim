@@ -76,9 +76,15 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 		dst_node_id := dst_map["node_id"].(i64) or_return
 		dst_interface_id := dst_map["interface_id"].(i64) or_return
 
+		loss_factor, ok := obj["loss_factor"].(f64)
+		if !ok {
+			loss_factor = 0
+		}
+
 		append(conns, Connection{
 			src_id = ConnectionID{node_id = int(src_node_id), interface_id = int(src_interface_id)},
 			dst_id = ConnectionID{node_id = int(dst_node_id), interface_id = int(dst_interface_id)},
+			loss_factor = f32(loss_factor),
 		})
 	}
 
@@ -183,7 +189,8 @@ net_config := `
 		{
 			"name": "comcast_cloudflare",
 			"src": { "node_id": 1, "interface_id": 2 },
-			"dst": { "node_id": 3, "interface_id": 0 }
+			"dst": { "node_id": 3, "interface_id": 0 },
+			"loss_factor": 0.1
 		},
 		{
 			"name": "google_cloudflare",
