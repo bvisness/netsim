@@ -36,6 +36,7 @@ text_color    := Vec3{}
 text_color2   := Vec3{}
 button_color  := Vec3{}
 line_color    := Vec3{}
+outline_color    := Vec3{}
 graph_color   := Vec3{}
 node_color    := Vec3{}
 toolbar_color := Vec3{}
@@ -94,24 +95,26 @@ set_timescale :: proc(new_timescale: f32) {
 @export
 set_color_mode :: proc "contextless" (is_dark: bool) {
 	if is_dark {
-		bg_color      = Vec3{15, 15, 15}
-		bg_color2     = Vec3{0, 0, 0}
+		bg_color      = Vec3{15,   15,  15}
+		bg_color2     = Vec3{0,     0,   0}
 		text_color    = Vec3{255, 255, 255}
 		text_color2   = Vec3{180, 180, 180}
-		button_color  = Vec3{40, 40, 40}
+		button_color  = Vec3{40,   40,  40}
 		line_color    = Vec3{120, 120, 120}
+		outline_color = Vec3{80,   80,  80}
 		node_color    = Vec3{180, 180, 180}
 		graph_color   = Vec3{180, 180, 180}
 		toolbar_color = Vec3{120, 120, 120}
 	} else {
 		bg_color      = Vec3{254, 252, 248}
 		bg_color2     = Vec3{255, 255, 255}
-		text_color    = Vec3{0, 0, 0}
-		text_color2   = Vec3{80, 80, 80}
+		text_color    = Vec3{0,     0,   0}
+		text_color2   = Vec3{80,   80,  80}
 		button_color  = Vec3{161, 139, 124}
 		line_color    = Vec3{219, 211, 205}
-		node_color    = Vec3{129, 100, 80}
-		graph_color   = Vec3{69, 49, 34}
+		outline_color = Vec3{219, 211, 205}
+		node_color    = Vec3{129, 100,  80}
+		graph_color   = Vec3{69,   49,  34}
 		toolbar_color = Vec3{219, 211, 205}
 	}
 }
@@ -549,7 +552,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(max_width + pad_size, toolbar_height, width, height), 0, bg_color)
 
 	// draw menu border
-	draw_line(Vec2{max_width + pad_size, toolbar_height}, Vec2{max_width + pad_size, height}, 3, line_color)
+	draw_line(Vec2{max_width + pad_size, toolbar_height}, Vec2{max_width + pad_size, height}, 2, line_color)
 
 	menu_offset := max_width + (pad_size * 2)
 
@@ -572,7 +575,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 
 		y = pad_size + toolbar_height
-		draw_text("Node Inspector", Vec2{menu_offset, next_line(&y)}, 1, default_font, text_color)
+		draw_text("Node Inspector", Vec2{menu_offset, next_line(&y)}, 1.125, default_font, text_color); y += 1
 		draw_text(fmt.tprintf("Name: %s", inspect_node.name), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 		draw_text(fmt.tprintf("Sent: %d", inspect_node.sent), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 		draw_text(fmt.tprintf("Received: %d", inspect_node.received), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
@@ -606,6 +609,25 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
 		draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
 		draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
+		y += ((graph_size + graph_gap) * 2) + graph_gap
+
+		// render rule viewer
+		{
+			rule_left: f32 = menu_offset
+
+			draw_text("NICs:", Vec2{rule_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+			for interface, i in inspect_node.interfaces {
+				draw_text(fmt.tprintf("%d - %s", i + 1, ip_to_str(interface.ip)), Vec2{rule_left, next_line(&y)}, 1, monospace_font, text_color2)
+			}
+
+			next_line(&y)
+			draw_text("Routing Rules:", Vec2{rule_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+
+			ip_str_chunk := "255.255.255.255"
+			for rule in inspect_node.routing_rules {
+				draw_text(fmt.tprintf("IP: %*s,   Subnet: %*s, NIC: %d", len(ip_str_chunk), ip_to_str(rule.ip), len(ip_str_chunk), ip_to_str(rule.subnet_mask), rule.interface_id + 1), Vec2{rule_left, next_line(&y)}, 1, monospace_font, text_color2)
+			}
+		}
 
 		// render logs and debug info
 		{
@@ -632,7 +654,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
 			draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
 
-			draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, line_color)
+			draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, outline_color)
 
 			logs_left += 5
 
@@ -766,11 +788,11 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 
 	text_width := measure_text(header, 1, default_font)
 	center_offset := (size / 2) - (text_width / 2)
-	draw_text(header, Vec2{x + center_offset, y}, 1, default_font, text_color2)
+	draw_text(header, Vec2{x + center_offset, y}, 1, default_font, text_color)
 
 	graph_top := y + text_height + line_gap
 	draw_rect(rect(x, graph_top, size, size), 0, bg_color2)
-	draw_rect_outline(rect(x, graph_top, size, size), 2, line_color)
+	draw_rect_outline(rect(x, graph_top, size, size), 2, outline_color)
 
 	draw_line(Vec2{x - 5, graph_top + size - graph_edge_pad}, Vec2{x + 5, graph_top + size - graph_edge_pad}, 1, graph_color)
 	draw_line(Vec2{x - 5, graph_top + graph_edge_pad}, Vec2{x + 5, graph_top + graph_edge_pad}, 1, graph_color)
@@ -778,11 +800,11 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	if queue.len(history^) > 1 {
 		high_str := fmt.tprintf("%d", max_val)
 		high_width := measure_text(high_str, 1, default_font) + line_gap
-		draw_text(high_str, Vec2{(x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color2)
+		draw_text(high_str, Vec2{(x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color)
 
 		low_str := fmt.tprintf("%d", min_val)
 		low_width := measure_text(low_str, 1, default_font) + line_gap
-		draw_text(low_str, Vec2{(x - 5) - low_width, graph_top + size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color2)
+		draw_text(low_str, Vec2{(x - 5) - low_width, graph_top + size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color)
 	}
 
 	graph_y_bounds := size - (graph_edge_pad * 2)
