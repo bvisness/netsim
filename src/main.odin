@@ -637,6 +637,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			y = pad_size + toolbar_height
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+
+			got_session := false
 			for sess in inspect_node.tcp_sessions {
 				if sess.ip == 0 {
 					continue
@@ -645,6 +647,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.send_next, sess.send_window, sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.receive_next, sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.initial_send_seq_num, sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+
+				got_session = true
+			}
+			if !got_session {
+				draw_text("None yet!", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 
 			next_line(&y)
