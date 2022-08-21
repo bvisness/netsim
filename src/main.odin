@@ -22,13 +22,11 @@ exiting_packets : [dynamic]Packet
 
 nodes_by_name : map[string]^Node
 
-t: f32 = 0
-min_width   : f32 = 10000
-min_height  : f32 = 10000
-max_width   : f32 = 0
-max_height  : f32 = 0
-text_height : f32 = 16
-line_gap :    f32 = 3
+t          : f32
+min_width  : f32
+min_height : f32
+max_width  : f32
+max_height : f32
 
 bg_color      := Vec3{}
 bg_color2     := Vec3{}
@@ -58,14 +56,17 @@ is_mouse_down := false
 was_mouse_down := false
 clicked := false
 
-first_frame := true
 node_selected := -1
+
+first_frame := true
 muted := false
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
 history_size   : int = 50
 log_size       : int = 50
+text_height: f32 = 16
+line_gap   : f32 = 3
 
 tick_count := 0
 last_tick_t := t
@@ -141,6 +142,13 @@ init_state :: proc() {
 	for n in &nodes {
 		nodes_by_name[n.name] = &n
 	}
+
+	t = 0
+	scale = 1
+	min_width  = 10000
+	min_height = 10000
+	max_width  = 0
+	max_height = 0
 
 	// nasty padding adjustments ahoy
 	for i := 0; i < len(nodes); i += 1 {
