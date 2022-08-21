@@ -834,6 +834,14 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		congestion_control_on = !congestion_control_on
 	}
 
+	draw_text(fmt.tprintf("ACK delay: %d", ack_delay), Vec2{20, 200}, 1, default_font, text_color)
+	if button(rect(100, 195, 20, 20), "-", monospace_font) {
+		ack_delay = max(0, ack_delay - 1)
+	}
+	if button(rect(125, 195, 20, 20), "+", monospace_font) {
+		ack_delay = ack_delay + 1
+	}
+
 	// draw toolbar
 	edge_pad : f32 = 10
 	button_height : f32 = 30

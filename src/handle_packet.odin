@@ -9,6 +9,7 @@ SEG_SIZE :: 10
 RETRANSMIT_TIMEOUT :: 30 // ticks
 SSTHRESH :: 4*SEG_SIZE // bytes
 GLOBAL_TIMEOUT :: 45 // ticks
+ack_delay := 5 // ticks
 
 COLOR_RST    := Vec3{220, 80, 80}
 COLOR_SYN    := Vec3{80, 80, 220}
@@ -307,18 +308,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
             }
 
             // Send an ACK to try and let the other side know what we expect.
-            send_packet(n, Packet{
-                dst_ip = p.src_ip,
-                protocol = PacketProtocol.TCP,
-                tcp = PacketTcp{
-                    // This is a bog-standard ACK of our current state.
-                    seq = sess.snd_nxt,
-                    ack = sess.rcv_nxt,
-                    control = TCP_ACK,
-                    wnd = sess.rcv_wnd,
-                },
-                color = &COLOR_ACK,
-            })
+            batch_ack(sess)
             return
         }
 
@@ -477,18 +467,9 @@ process_received_tcp_packet :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> b
     sess.rcv_nxt += u32(len(p.data))
     if len(p.data) > 0 {
         node_log(n, fmt.aprintf("Received: \"%s\"", p.data))
-        send_packet(n, Packet{
-            dst_ip = p.src_ip,
-            protocol = PacketProtocol.TCP,
-            tcp = PacketTcp{
-                seq = sess.snd_nxt,
-                ack = sess.rcv_nxt,
-                control = TCP_ACK,
-                wnd = sess.rcv_wnd,
-            },
-            color = &COLOR_ACK,
-        })
         strings.write_string(&sess.received_data, p.data)
+
+        batch_ack(sess)
     }
 
     // TODO: FIN
@@ -610,6 +591,24 @@ tcp_tick :: proc(n: ^Node) {
                     // Track sent bytes in cwnd
                     sess.cwnd_sent += u32(len(to_send.data))
                 }
+            }
+
+            // Send any batched ACKs
+            acks_are_ready := sess.last_ack_timestamp != 0
+            ack_delay_expired := tick_count - sess.last_ack_timestamp >= ack_delay
+            if acks_are_ready && ack_delay_expired {
+                send_packet(n, Packet{
+                    dst_ip = sess.ip,
+                    protocol = PacketProtocol.TCP,
+                    tcp = PacketTcp{
+                        seq = sess.snd_nxt,
+                        ack = sess.eventual_ack,
+                        control = TCP_ACK,
+                        wnd = sess.rcv_wnd,
+                    },
+                    color = &COLOR_ACK,
+                })
+                sess.last_ack_timestamp = 0
             }
 
             // Generate new outgoing packets at the end of the tick so we can see
@@ -762,6 +761,13 @@ tcp_track_ack :: proc(n: ^Node, sess: ^TcpSession, ack: u32) {
         sess.cwnd_acked = 0
         node_log(n, fmt.aprintf("Increasing congestion window to %d", sess.cwnd))
     }
+}
+
+batch_ack :: proc(sess: ^TcpSession) {
+    if sess.last_ack_timestamp == 0 {
+        sess.last_ack_timestamp = tick_count
+    }
+    sess.eventual_ack = max(sess.eventual_ack, sess.rcv_nxt)
 }
 
 node_log_packet :: proc(n: ^Node, p: Packet) {

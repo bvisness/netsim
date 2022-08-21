@@ -196,6 +196,9 @@ TcpSession :: struct {
 	retransmit: [dynamic]TcpSend,
 	retransmit_history: queue.Queue(u32),
 
+	first_ack_timestamp: int, // Tick count of the first ACK in this batch
+	eventual_ack: u32, // The number we will eventually ACK with after a delay
+
 	received_data: strings.Builder,
 }
 
