@@ -55,8 +55,12 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 		if !ok {
 			packets_per_tick = 1
 		}
+		max_buffer_size, ok2 := obj["buffer_size"].(i64)
+		if !ok2 {
+			max_buffer_size = 15
+		}
 
-		append(nodes, make_node(pos, name, interfaces[:], rules[:], int(packets_per_tick)))
+		append(nodes, make_node(pos, name, interfaces[:], rules[:], int(packets_per_tick), int(max_buffer_size)))
 	}
 
 	// parse connections
@@ -90,7 +94,8 @@ net_config := `
 			"interfaces": [ "2.2.2.123" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 }
-			]
+			],
+			"buffer_size": 5
 		},
 		{
 			"name": "comcast",

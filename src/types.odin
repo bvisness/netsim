@@ -20,6 +20,7 @@ Node :: struct {
 	interfaces: []Interface,
 	routing_rules: []RoutingRule,
 	packets_per_tick: int,
+	max_buffer_size: int,
 
 	sent: u64,
 	old_sent: u64,
@@ -174,6 +175,7 @@ make_node :: proc(
 	interfaces: []Interface,
 	routing_rules: []RoutingRule,
 	packets_per_tick: int,
+	max_buffer_size: int,
 ) -> Node {
 	n := Node{
 		pos = pos,
@@ -181,9 +183,10 @@ make_node :: proc(
 		interfaces = interfaces,
 		routing_rules = routing_rules,
 		packets_per_tick = packets_per_tick,
+		max_buffer_size = max_buffer_size,
 	}
 
-	if ok := queue.init(&n.buffer, buffer_size); !ok {
+	if ok := queue.init(&n.buffer, max_buffer_size); !ok {
 		fmt.println("Successfully failed to init packet queue.")
 		intrinsics.trap()
 	}

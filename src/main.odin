@@ -64,7 +64,6 @@ muted := false
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
-buffer_size    : int = 15
 history_size   : int = 50
 log_size       : int = 50
 
@@ -302,7 +301,7 @@ tick :: proc() {
 		packet.dst_node = send.dst
 		packet.dst_bufid = queue.len(send.dst.buffer)
 
-		if queue.len(send.dst.buffer) >= buffer_size {
+		if queue.len(send.dst.buffer) >= send.dst.max_buffer_size {
 			// fmt.printf("Buffer full, packet dropped\n")
 			packet.dst_node.dropped += 1
 			drop_packet(packet, true)
@@ -583,8 +582,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		draw_text(fmt.tprintf("Received: %d", inspect_node.received), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 		draw_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
-		buffer_used := min(buffer_size, queue.len(inspect_node.buffer))
-		draw_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, buffer_size), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		buffer_used := min(inspect_node.max_buffer_size, queue.len(inspect_node.buffer))
+		draw_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, inspect_node.max_buffer_size), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		average_packet_ticks : u32 = 0
 		average_packet_ttl   : u32 = 0
@@ -744,7 +743,7 @@ generate_random_packet :: proc() {
 		return
 	}
 
-	if queue.len(nodes[src_id].buffer) >= buffer_size {
+	if queue.len(nodes[src_id].buffer) >= nodes[src_id].max_buffer_size {
 		return
 	}
 
