@@ -58,6 +58,7 @@ log_scroll_y   : f32 = 0
 is_mouse_down := false
 was_mouse_down := false
 clicked := false
+is_hovering := false
 
 node_selected := -1
 
@@ -469,6 +470,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	defer was_mouse_down = is_mouse_down
 	defer clicked = false
 	defer scroll_velocity = 0
+	defer is_hovering = false
 
     t += dt
 
@@ -587,8 +589,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// check intersections
 	for node, idx in &nodes {
-		if clicked && pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
-			node_selected = idx
+		if pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
+			change_cursor("pointer")
+			if clicked {
+				node_selected = idx
+			}
+
+			is_hovering = true
 			break
 		}
 	}
@@ -757,6 +764,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		set_session_storage("muted", muted ? "true": "false")
 	}
 
+	if !is_hovering {
+		change_cursor("auto")
+	}
+
 	remove_packets(&exiting_packets, dead_packets[:])
     return true
 }
@@ -891,8 +902,14 @@ button :: proc(rect: Rect, text: string, font: string) -> bool {
 	text_width := measure_text(text, 1, font)
 	font_height : f32 = 16
 	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(font_height / 2)}, 1, font, text_color)
-	if clicked && pt_in_rect(mouse_pos, rect) {
-		return true
+
+	if pt_in_rect(mouse_pos, rect) {
+		change_cursor("pointer")
+		if clicked {
+			return true
+		}
+
+		is_hovering = true
 	}
 	return false
 }

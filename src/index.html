@@ -87,6 +87,7 @@
 		let dpr;
 		let textHeight;
 		let cached_font = "";
+		let cached_cursor = "";
 		let cached_size = 0;
 
 		function updateFont(size, font) {
@@ -227,6 +228,13 @@
 					},
 					get_time() {
 						return Date.now();
+					},
+					change_cursor(p, len) {
+						let cursor_type = window.wasm.odinMem.loadString(p, len);
+						if (cursor_type !== cached_cursor) {
+							document.body.style.cursor = cursor_type;
+							cached_cursor = cursor_type;
+						}
 					}
 				},
 			});
