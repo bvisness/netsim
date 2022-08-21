@@ -195,7 +195,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
             sess.rcv_nxt = p.tcp.seq + 1
             if is_ack {
                 sess.snd_una = p.tcp.ack
-                // TODO: Advance past any segments that need to be retried.
+                tcp_clear_retransmissions(n, sess, p.tcp.ack)
             }
 
             if sess.snd_una > sess.iss {
@@ -296,11 +296,10 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
 
         is_ack := p.tcp.control&TCP_ACK != 0
         is_rst := p.tcp.control&TCP_RST != 0
-        if !acceptable && !is_ack && !is_rst {
+        if !acceptable {
             node_log(n, fmt.aprintf("Unacceptable segment (case %d).", unacceptable_case))
             node_log_tcp_packet(n, p)
             node_log_tcp_state(n, sess)
-            running = false
 
             if p.tcp.control&TCP_RST != 0 {
                 return
@@ -662,7 +661,7 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
 
 	append(&n.tcp_sessions, TcpSession{
         ip = ip,
-        rcv_wnd = 20, // TODO(ben): This is arbitrary for now!
+        rcv_wnd = 40, // TODO(ben): This is arbitrary for now!
         received_data = strings.builder_make(),
     })
 	return len(n.tcp_sessions) - 1, true
@@ -710,12 +709,7 @@ node_log_tcp_packet :: proc(n: ^Node, p: Packet) {
 }
 
 node_log_tcp_state :: proc(n: ^Node, sess: ^TcpSession) {
-    node_log(n, fmt.aprintf("  State: %v", sess.state))
-    node_log(n, fmt.aprintf("  SND.UNA: %v", sess.snd_una))
-    node_log(n, fmt.aprintf("  SND.NXT: %v", sess.snd_nxt))
-    node_log(n, fmt.aprintf("  SND.WND: %v", sess.snd_wnd))
-    node_log(n, fmt.aprintf("  ISS: %v", sess.iss))
-    node_log(n, fmt.aprintf("  RCV.NXT: %v", sess.rcv_nxt))
-    node_log(n, fmt.aprintf("  RCV.WND: %v", sess.rcv_wnd))
-    node_log(n, fmt.aprintf("  IRS: %v", sess.irs))
+    node_log(n, fmt.aprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.snd_nxt, sess.snd_wnd, sess.snd_una))
+    node_log(n, fmt.aprintf("  RCV: NXT=%v, WND=%v", sess.rcv_nxt, sess.rcv_wnd))
+    node_log(n, fmt.aprintf("  ISS: %v, IRS: %v", sess.iss, sess.irs))
 }

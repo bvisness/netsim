@@ -37,7 +37,7 @@ text_color    := Vec3{}
 text_color2   := Vec3{}
 button_color  := Vec3{}
 line_color    := Vec3{}
-outline_color    := Vec3{}
+outline_color := Vec3{}
 graph_color   := Vec3{}
 node_color    := Vec3{}
 toolbar_color := Vec3{}
@@ -423,6 +423,8 @@ send_data_via_tcp :: proc(src, dst: ^Node, data: string) -> bool {
 	return false
 }
 
+random_seed: u64
+
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
@@ -430,7 +432,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	// This is nasty code that allows me to do load-time things once the wasm context is init
 	if first_frame {
-		rand.set_global_seed(u64(get_time()))
+		random_seed = u64(get_time())
+		rand.set_global_seed(random_seed)
 		get_session_storage("muted")
 		first_frame = false
 	}
@@ -750,6 +753,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if !is_hovering {
 		change_cursor("auto")
 	}
+
+	seed_str := fmt.tprintf("Seed: 0x%X", random_seed)
+	seed_width := measure_text(seed_str, 1, monospace_font)
+	draw_text(seed_str, Vec2{width - seed_width - 10, height - text_height - 24}, 1, monospace_font, text_color2)
 
 	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
 	hash_width := measure_text(hash_str, 1, monospace_font)
