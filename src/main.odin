@@ -69,7 +69,7 @@ toolbar_height : f32 = 40
 history_size   : int = 50
 log_size       : int = 50
 text_height: f32 = 16
-line_gap   : f32 = 3
+line_gap   : f32 = 10
 
 running := false
 
@@ -711,7 +711,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				}
 
 				if tick_changed {
-					y += (text_height / 2)
+					y += text_height
 					draw_text(time_str, Vec2{logs_left, y}, 1, monospace_font, text_color)
 				}
 				draw_text(msg.content, Vec2{logs_left + time_width + time_gap, next_line(&y)}, 1, monospace_font, text_color2)

@@ -5,6 +5,11 @@ import "core:runtime"
 import "core:fmt"
 
 @export
+set_text_height :: proc "contextless" (height: f32) {
+	text_height = height
+}
+
+@export
 mouse_move :: proc "contextless" (x, y: int) {
 	last_mouse_pos = mouse_pos
 	mouse_pos = Vec2{f32(x), f32(y)}

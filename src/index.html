@@ -87,12 +87,15 @@
 		let dpr;
 		let textHeight;
 		let cached_font = "";
+		let cached_size = 0;
 
 		function updateFont(size, font) {
 			let font_str = `${14 * dpr * size}px ${font}`;
-			if (font_str !== cached_font) {
+			let cached_font_str = `${14 * dpr * cached_size}px ${cached_font}`;
+			if (font_str !== cached_font_str) {
 				ctx.font = font_str;
-				cached_font = font_str;
+				cached_font = font;
+				cached_size = size;
 			}
 		}
 
@@ -383,9 +386,9 @@
 				canvas.height = canvasContainer.getBoundingClientRect().height * dpr;
 
 				ctx.textBaseline = 'top';
-				ctx.font = `${14 * dpr}px -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`;
+				updateFont(cached_size, cached_font);
 				textHeight = ctx.measureText('NothinBelowTheBaseline').actualBoundingBoxDescent;
-				// window.wasm.setTextHeight(textHeight / dpr);
+				window.wasm.set_text_height(textHeight / dpr);
 
 				wakeUp();
 			}
