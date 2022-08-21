@@ -2,6 +2,8 @@ package main
 
 import "core:container/queue"
 import "core:fmt"
+import "core:sort"
+import "core:strings"
 
 SEG_SIZE :: 10
 RETRANSMIT_TIMEOUT :: 15 // ticks
@@ -178,7 +180,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 // That means the RST was intended for us and we should close
                 // our connection.
                 node_log(n, "Got a RST while handshaking. Closing connection.")
-                close_tcp_session(n, sess_idx)
+                close_tcp_session(n, sess)
             }
             return
         }
@@ -320,149 +322,135 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
             return
         }
 
-        // TODO: Actually queue up packets for good processing and handle sequence numbers!
+        // Add packet to our receive buffer for ordered processing
+        append(&sess.rcv_buffer, p)
+    }
+}
 
-        // TODO: Handle the following in some way:
-        //
-        //  In the following it is assumed that the segment is the idealized
-        //  segment that begins at RCV.NXT and does not exceed the window. One
-        //  could tailor actual segments to fit this assumption by trimming off
-        //  any portions that lie outside the window (including SYN and FIN)
-        //  and only processing further if the segment then begins at RCV.NXT.
-        //  Segments with higher beginning sequence numbers SHOULD be held for
-        //  later processing (SHLD-31).
-        //
+// Put stuff in this proc that needs to be handled in sequence order.
+// If this function returns false, abort processing for this tick.
+//
+// TODO(ben): I think there's a _lot_ more that should be in this function...
+// Can the handshake be handled in here? Parts of the handshake will have
+// correct sequence numbers, but not all of it...
+process_received_tcp_packet :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> bool {
+    // TODO: Handle the following in some way:
+    //
+    //  In the following it is assumed that the segment is the idealized
+    //  segment that begins at RCV.NXT and does not exceed the window. One
+    //  could tailor actual segments to fit this assumption by trimming off
+    //  any portions that lie outside the window (including SYN and FIN)
+    //  and only processing further if the segment then begins at RCV.NXT.
+    //  Segments with higher beginning sequence numbers SHOULD be held for
+    //  later processing (SHLD-31).
+    //
 
-        // Not doing the security check they mention for a reset attack.
+    // Only process this packet if it's the next one we expect.
+    if p.tcp.seq != sess.rcv_nxt {
+        return false
+    }
 
-        // Handle a RST.
-        if p.tcp.control&TCP_RST != 0 {
-            // There is some nuance in the spec about how to handle the various
-            // types of connection closes and resets. We don't care.
-            node_log(n, "Got a RST while established; closing connection.")
-            close_tcp_session(n, sess_idx)
-            return
-        }
+    // Not doing the security check they mention for a reset attack.
 
-        // Again, no security checks.
+    // Handle a RST.
+    if p.tcp.control&TCP_RST != 0 {
+        // There is some nuance in the spec about how to handle the various
+        // types of connection closes and resets. We don't care.
+        node_log(n, "Got a RST while established; closing connection.")
+        close_tcp_session(n, sess)
+        return false
+    }
 
-        // Handle a SYN.
-        if p.tcp.control&TCP_SYN != 0 {
-            if sess.state == TcpState.SynReceived {
-                // We're still handshaking, already received a SYN, and now we
-                // got another SYN. Just bail.
-                node_log(n, "Got an extra SYN while handshaking. Giving up.")
-                close_tcp_session(n, sess_idx)
-                return
-            } else {
-                // Receiving a SYN while we are already synchronized could mean
-                // a bunch of different things. Per RFC 5691, we send an ACK.
-                //
-                // TODO: Handle TIME-WAIT in a special way per the spec.
-                node_log(n, fmt.aprintf("Received a SYN while already synchronized (in state %v). ACKing.", sess.state))
-                send_packet(n, Packet{
-                    dst_ip = p.src_ip,
-                    protocol = PacketProtocol.TCP,
-                    tcp = PacketTcp{
-                        // This is a bog-standard ACK of our current state.
-                        seq = sess.snd_nxt,
-                        ack = sess.rcv_nxt,
-                        control = TCP_ACK,
-                        wnd = sess.rcv_wnd,
-                    },
-                    color = &COLOR_ACK,
-                })
-                return
-            }
-        }
+    // Again, no security checks.
 
-        // Ensure that any packets we process at this point have an ACK.
-        if p.tcp.control&TCP_ACK == 0 {
-            return
-        }
-        // From here on out, we know we have ACK data.
-
-        // Ignoring the RFC 5691 blind data injection attack for now.
-
+    // Handle a SYN.
+    if p.tcp.control&TCP_SYN != 0 {
         if sess.state == TcpState.SynReceived {
-            if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
-                node_log(n, fmt.aprintf("Good ACK. Updating window and moving from %v to ESTABLISHED.", sess.state))
-                sess.state = TcpState.Established
+            // We're still handshaking, already received a SYN, and now we
+            // got another SYN. Just bail.
+            node_log(n, "Got an extra SYN while handshaking. Giving up.")
+            close_tcp_session(n, sess)
+            return false
+        } else {
+            // Receiving a SYN while we are already synchronized could mean
+            // a bunch of different things. Per RFC 5691, we send an ACK.
+            //
+            // TODO: Handle TIME-WAIT in a special way per the spec.
+            node_log(n, fmt.aprintf("Received a SYN while already synchronized (in state %v). ACKing.", sess.state))
+            send_packet(n, Packet{
+                dst_ip = p.src_ip,
+                protocol = PacketProtocol.TCP,
+                tcp = PacketTcp{
+                    // This is a bog-standard ACK of our current state.
+                    seq = sess.snd_nxt,
+                    ack = sess.rcv_nxt,
+                    control = TCP_ACK,
+                    wnd = sess.rcv_wnd,
+                },
+                color = &COLOR_ACK,
+            })
+            return true
+        }
+    }
+
+    // Ensure that any packets we process at this point have an ACK.
+    if p.tcp.control&TCP_ACK == 0 {
+        return true
+    }
+    // From here on out, we know we have ACK data.
+
+    // Ignoring the RFC 5691 blind data injection attack for now.
+
+    if sess.state == TcpState.SynReceived {
+        if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
+            node_log(n, fmt.aprintf("Good ACK. Updating window and moving from %v to ESTABLISHED.", sess.state))
+            sess.state = TcpState.Established
+            sess.snd_wnd = p.tcp.wnd
+            sess.snd_wl1 = p.tcp.seq
+            sess.snd_wl2 = p.tcp.ack
+        } else {
+            // ACK outside the window while handshaking. Alas.
+            node_log(n, "Got an ACK outside our window while handshaking:")
+            node_log_tcp_state(n, sess)
+            send_packet(n, Packet{
+                dst_ip = p.src_ip,
+                protocol = PacketProtocol.TCP,
+                tcp = PacketTcp{
+                    seq = p.tcp.ack,
+                    control = TCP_RST,
+                },
+                color = &COLOR_RST,
+            })
+        }
+    }
+
+    // To avoid confusing control flow, we define good ESTABLISHED
+    // packet processing as its own proc that we can call from all the
+    // other various states. If this returns false, abort processing.
+    process_established :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> bool {
+        // Update send window based on ACK from other side.
+        if sess.snd_una <= p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
+            window_moved_forward := sess.snd_wl1 < p.tcp.seq // TODO(mod)
+            ack_moved_forward := sess.snd_wl1 == p.tcp.seq && sess.snd_wl2 <= p.tcp.ack // TODO(mod)
+            if window_moved_forward || ack_moved_forward {
                 sess.snd_wnd = p.tcp.wnd
                 sess.snd_wl1 = p.tcp.seq
                 sess.snd_wl2 = p.tcp.ack
-            } else {
-                // ACK outside the window while handshaking. Alas.
-                node_log(n, "Got an ACK outside our window while handshaking:")
-                node_log_tcp_state(n, sess)
-                send_packet(n, Packet{
-                    dst_ip = p.src_ip,
-                    protocol = PacketProtocol.TCP,
-                    tcp = PacketTcp{
-                        seq = p.tcp.ack,
-                        control = TCP_RST,
-                    },
-                    color = &COLOR_RST,
-                })
             }
         }
 
-        // To avoid confusing control flow, we define good ESTABLISHED
-        // packet processing as its own proc that we can call from all the
-        // other various states. If this returns false, abort processing.
-        process_established :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> bool {
-            // Update send window based on ACK from other side.
-            if sess.snd_una <= p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
-                window_moved_forward := sess.snd_wl1 < p.tcp.seq // TODO(mod)
-                ack_moved_forward := sess.snd_wl1 == p.tcp.seq && sess.snd_wl2 <= p.tcp.ack // TODO(mod)
-                if window_moved_forward || ack_moved_forward {
-                    sess.snd_wnd = p.tcp.wnd
-                    sess.snd_wl1 = p.tcp.seq
-                    sess.snd_wl2 = p.tcp.ack
-                }
-            }
-
-            if p.tcp.ack <= sess.snd_una { // TODO(mod)
-                // This ACK is a duplicate and can be ignored.
-                node_log(n, "Duplicate ACK. No worries.")
-            } else if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
-                node_log(n, "Advancing send window.")
-                sess.snd_una = p.tcp.ack
-                tcp_clear_retransmissions(n, sess, p.tcp.ack)
-            } else {
-                // ACK for something not yet sent. Ignore, and ACK back at them
-                // to try and sort things out.
-                node_log(n, "Received an ACK from the future. Ignoring and ACKing our current state:")
-                node_log_tcp_state(n, sess)
-                send_packet(n, Packet{
-                    dst_ip = p.src_ip,
-                    protocol = PacketProtocol.TCP,
-                    tcp = PacketTcp{
-                        seq = sess.snd_nxt,
-                        ack = sess.rcv_nxt,
-                        control = TCP_ACK,
-                        wnd = sess.rcv_wnd,
-                    },
-                    color = &COLOR_ACK,
-                })
-                return false
-            }
-
-            return true
-        }
-
-        #partial switch sess.state {
-        case .Established:
-            if !process_established(n, sess, p) do return
-        // TODO: All the other states...
-        }
-
-        // Process the segment's data
-        sess.rcv_nxt += u32(len(p.data))
-        if len(p.data) > 0 {
-            node_log(n, fmt.aprintf("Received: \"%s\"", p.data))
-        }
-        if len(p.data) > 0 {
+        if p.tcp.ack <= sess.snd_una { // TODO(mod)
+            // This ACK is a duplicate and can be ignored.
+            node_log(n, "Duplicate ACK. No worries.")
+        } else if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
+            node_log(n, "Advancing send window.")
+            sess.snd_una = p.tcp.ack
+            tcp_clear_retransmissions(n, sess, p.tcp.ack)
+        } else {
+            // ACK for something not yet sent. Ignore, and ACK back at them
+            // to try and sort things out.
+            node_log(n, "Received an ACK from the future. Ignoring and ACKing our current state:")
+            node_log_tcp_state(n, sess)
             send_packet(n, Packet{
                 dst_ip = p.src_ip,
                 protocol = PacketProtocol.TCP,
@@ -474,12 +462,41 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 },
                 color = &COLOR_ACK,
             })
+            return false
         }
 
-        // TODO: FIN
-
-        // TODO: Timeouts (probably not here, but somewhere)
+        return true
     }
+
+    #partial switch sess.state {
+    case .Established:
+        if !process_established(n, sess, p) do return true
+    // TODO: All the other states...
+    }
+
+    // Process the segment's data
+    sess.rcv_nxt += u32(len(p.data))
+    if len(p.data) > 0 {
+        node_log(n, fmt.aprintf("Received: \"%s\"", p.data))
+        send_packet(n, Packet{
+            dst_ip = p.src_ip,
+            protocol = PacketProtocol.TCP,
+            tcp = PacketTcp{
+                seq = sess.snd_nxt,
+                ack = sess.rcv_nxt,
+                control = TCP_ACK,
+                wnd = sess.rcv_wnd,
+            },
+            color = &COLOR_ACK,
+        })
+        strings.write_string(&sess.received_data, p.data)
+    }
+
+    // TODO: FIN
+
+    // TODO: Timeouts (probably not here, but somewhere)
+
+    return true
 }
 
 tcp_open :: proc(n: ^Node, dst_ip: u32) -> (^TcpSession, bool) {
@@ -516,15 +533,35 @@ tcp_open :: proc(n: ^Node, dst_ip: u32) -> (^TcpSession, bool) {
 
 tcp_tick :: proc(n: ^Node) {
     for sess in &n.tcp_sessions {
+        // Process received packets in order
+        sort.quick_sort_proc(sess.rcv_buffer[:], proc(a, b: Packet) -> int {
+            if a.tcp.seq < b.tcp.seq {
+                return -1
+            } else if a.tcp.seq > b.tcp.seq {
+                return 1
+            } else {
+                return 0
+            }
+        })
+        for len(sess.rcv_buffer) > 0 {
+            p := sess.rcv_buffer[0]
+            keep_going := process_received_tcp_packet(n, &sess, p)
+            ordered_remove(&sess.rcv_buffer, 0)
+            if !keep_going {
+                break
+            }
+        }
+
         if sess.state == TcpState.Established {
             // Send the packet at the front of our send queue (or our retransmission queue...)
             should_send: bool
             to_send: Packet
-            for s in sess.retransmit {
+            for s, i in sess.retransmit {
                 if tick_count - s.sent_at > s.retry_after {
                     node_log(n, fmt.aprintf("Retransmitting packet \"%s\" (SEG.SEQ=%d)", s.data, s.seq))
                     should_send = true
                     to_send = tcp_data_packet(&sess, s)
+                    ordered_remove(&sess.retransmit, i)
                     break
                 }
             }
@@ -626,12 +663,17 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
 	append(&n.tcp_sessions, TcpSession{
         ip = ip,
         rcv_wnd = 20, // TODO(ben): This is arbitrary for now!
+        received_data = strings.builder_make(),
     })
 	return len(n.tcp_sessions) - 1, true
 }
 
-close_tcp_session :: proc(n: ^Node, sess_idx: int) {
-	unordered_remove(&n.tcp_sessions, sess_idx)
+close_tcp_session :: proc(n: ^Node, sess: ^TcpSession) {
+    for node_sess, i in &n.tcp_sessions {
+        if sess == &node_sess {
+	        unordered_remove(&n.tcp_sessions, i)
+        }
+    }
 }
 
 tcp_send :: proc(sess: ^TcpSession, data: string) {
@@ -652,6 +694,11 @@ tcp_clear_retransmissions :: proc(n: ^Node, sess: ^TcpSession, ack: u32) {
         }
         break
     }
+}
+
+node_log_packet :: proc(n: ^Node, p: Packet) {
+    node_log(n, fmt.aprintf("  Protocol: %v", p.protocol))
+    node_log_tcp_packet(n, p)
 }
 
 node_log_tcp_packet :: proc(n: ^Node, p: Packet) {

@@ -129,7 +129,7 @@ reset_everything :: proc() {
 }
 
 init_state :: proc() {
-	set_timescale(0.4)
+	set_timescale(0.2)
 
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
@@ -295,13 +295,20 @@ tick :: proc() {
 				masked_dest := packet.dst_ip & rule.subnet_mask
 				// fmt.printf("%s & %s (%s) == %s?\n", ip_to_str(packet.dst_ip), ip_to_str(rule.subnet_mask), ip_to_str(masked_dest), ip_to_str(rule.ip))
 				if masked_dest == rule.ip {
-					if dst_node, ok := get_connected_node(node_id, rule.interface_id); ok {
-						packet.ttl += 1
-						append(&packet_sends, PacketSend{
-							packet = packet,
-							src = node,
-							dst = dst_node,
-						})
+					if dst_node, conn, ok := get_connected_node(node_id, rule.interface_id); ok {
+						if rand.float32() < conn.loss_factor {
+							node.dropped += 1
+							drop_packet(packet)
+							node_log(node, "Dropped packet due to flaky connection:")
+							node_log_packet(node, packet)
+						} else {
+							packet.ttl += 1
+							append(&packet_sends, PacketSend{
+								packet = packet,
+								src = node,
+								dst = dst_node,
+							})
+						}
 						// fmt.printf("Node %d: here have packet!!\n", node_id)
 					} else {
 						// fmt.printf("Node %s [%s]: bad routing rule! discarding packet.\n", node.name, ip_to_str(node.interfaces[0].ip))
@@ -351,7 +358,7 @@ tick :: proc() {
 	// 	}
 	// }
 
-	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], "Hello Handmade Network!")
+	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], GETTYSBURG)
 
 	// Update stat histories
 	for node in &nodes {
@@ -382,7 +389,7 @@ drop_packet :: proc(packet: Packet, drop_at_dst: bool = false) {
 	append(&exiting_packets, packet)
 }
 
-get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
+get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, ^Connection, bool) {
 	for _, conn_id in conns {
 		conn := &conns[conn_id]
 		matches_src := conn.src_id.node_id == my_node_id && conn.src_id.interface_id == my_interface_id
@@ -397,10 +404,10 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 			continue
 		}
 
-		return &nodes[other.node_id], true
+		return &nodes[other.node_id], conn, true
 	}
 
-	return nil, false
+	return nil, nil, false
 }
 
 send_data_via_tcp :: proc(src, dst: ^Node, data: string) -> bool {
@@ -632,12 +639,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 
 		// render logs and debug info
-		if len(inspect_node.tcp_sessions) > 0 {
-			logs_left: f32 = menu_offset + 500
-			logs_height: f32 = 1000
-			logs_width: f32 = 600
+		logs_left: f32 = menu_offset + 500
+		logs_height: f32 = 1000
+		logs_width: f32 = 600
 
-			y = pad_size + toolbar_height
+		y = pad_size + toolbar_height
+
+		if len(inspect_node.tcp_sessions) > 0 {
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 
 			for sess in inspect_node.tcp_sessions {
@@ -645,52 +653,61 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.snd_nxt, sess.snd_wnd, sess.snd_una), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.rcv_nxt, sess.rcv_wnd), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.iss, sess.irs), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				if strings.builder_len(sess.received_data) > 0 {
+					data := strings.to_string(sess.received_data)
+					line_width := 64
+
+					draw_text("Received data:", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					for i := 0; i < len(data); i += line_width {
+						draw_text(data[i:min(i+line_width, len(data))], Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					}
+				}
 			}
 
 			next_line(&y)
+		}
 
-			log_lines := 65
-			outline_width : f32 = 2
-			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
-			draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
+		log_lines := 65
+		outline_width : f32 = 2
+		draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+		draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
 
-			draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, outline_color)
+		draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, outline_color)
 
-			logs_left += 5
+		logs_left += 5
 
-			if queue.len(inspect_node.logs) > log_lines {
-				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-			} else {
-				next_line(&y)
+		if queue.len(inspect_node.logs) > log_lines {
+			draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+		} else {
+			next_line(&y)
+		}
+
+		iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
+		iter_end := queue.len(inspect_node.logs) - 1
+
+		current_tick := -1
+		tick_changed := false
+		time_str := ""
+		time_width : f32 = 0
+		time_gap : f32 = 10
+		for i := iter_start; i <= iter_end; i += 1 {
+			msg := queue.get(&inspect_node.logs, i)
+
+			if msg.timestamp != current_tick {
+				current_tick = msg.timestamp
+				tick_changed = true
+
+				time_str = fmt.tprintf("%d", msg.timestamp)
+				time_width = measure_text(time_str, 1, monospace_font)
 			}
 
-			iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
-			iter_end := queue.len(inspect_node.logs) - 1
-
-			current_tick := -1
-			tick_changed := false
-			time_str := ""
-			time_width : f32 = 0
-			time_gap : f32 = 10
-			for i := iter_start; i <= iter_end; i += 1 {
-				msg := queue.get(&inspect_node.logs, i)
-
-				if msg.timestamp != current_tick {
-					current_tick = msg.timestamp
-					tick_changed = true
-
-					time_str = fmt.tprintf("%d", msg.timestamp)
-					time_width = measure_text(time_str, 1, monospace_font)
-				}
-
-				if tick_changed {
-					y += text_height
-					draw_text(time_str, Vec2{logs_left, y}, 1, monospace_font, text_color)
-				}
-				draw_text(msg.content, Vec2{logs_left + time_width + time_gap, next_line(&y)}, 1, monospace_font, text_color2)
-
-				tick_changed = false
+			if tick_changed {
+				y += text_height
+				draw_text(time_str, Vec2{logs_left, y}, 1, monospace_font, text_color)
 			}
+			draw_text(msg.content, Vec2{logs_left + time_width + time_gap, next_line(&y)}, 1, monospace_font, text_color2)
+
+			tick_changed = false
 		}
 	}
 

@@ -3,6 +3,7 @@ package main
 import "core:container/queue"
 import "core:intrinsics"
 import "core:fmt"
+import "core:strings"
 
 Vec2 :: [2]f32
 Vec3 :: [3]f32
@@ -160,6 +161,8 @@ TcpSession :: struct {
 	snd_buffer: [dynamic]Packet,
 	rcv_buffer: [dynamic]Packet,
 	retransmit: [dynamic]TcpSend,
+
+	received_data: strings.Builder,
 }
 
 TcpState :: enum {
