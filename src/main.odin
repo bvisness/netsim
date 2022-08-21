@@ -372,8 +372,8 @@ tick :: proc() {
 	// }
 
 	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], GETTYSBURG)
-	send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
-	send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], MUCH_ADO)
+	// send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
+	// send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], MUCH_ADO)
 
 	// Update stat histories
 	for node in &nodes {

@@ -2,11 +2,13 @@ package main
 
 import "core:container/queue"
 import "core:fmt"
+import "core:math/rand"
 import "core:sort"
 import "core:strings"
 
 SEG_SIZE :: 10
-RETRANSMIT_TIMEOUT :: 30 // ticks
+RETRANSMIT_TIMEOUT :: 25 // ticks
+RETRANSMIT_JITTER :: 10 // more ticks
 SSTHRESH :: 4*SEG_SIZE // bytes
 GLOBAL_TIMEOUT :: 45 // ticks
 ack_delay := 5 // ticks
@@ -539,6 +541,7 @@ tcp_tick :: proc(n: ^Node) {
                 sess.cwnd = 1*SEG_SIZE // slow-start back up from 1
                 sess.cwnd_sent = 0
                 sess.cwnd_acked = 0
+                node_log(n, "Hit global timeout. Reverting CWND to the minimum.")
             }
 
             cwnd_available := sess.cwnd_sent < sess.cwnd
@@ -584,7 +587,7 @@ tcp_tick :: proc(n: ^Node) {
                             data = to_send.data,
                             seq = to_send.tcp.seq,
                             sent_at = tick_count,
-                            retry_after = RETRANSMIT_TIMEOUT,
+                            retry_after = RETRANSMIT_TIMEOUT + int(rand.int31() % RETRANSMIT_JITTER),
                         })
                     }
 
@@ -594,8 +597,8 @@ tcp_tick :: proc(n: ^Node) {
             }
 
             // Send any batched ACKs
-            acks_are_ready := sess.last_ack_timestamp != 0
-            ack_delay_expired := tick_count - sess.last_ack_timestamp >= ack_delay
+            acks_are_ready := sess.first_ack_timestamp != 0
+            ack_delay_expired := tick_count - sess.first_ack_timestamp >= ack_delay
             if acks_are_ready && ack_delay_expired {
                 send_packet(n, Packet{
                     dst_ip = sess.ip,
@@ -608,7 +611,7 @@ tcp_tick :: proc(n: ^Node) {
                     },
                     color = &COLOR_ACK,
                 })
-                sess.last_ack_timestamp = 0
+                sess.first_ack_timestamp = 0
             }
 
             // Generate new outgoing packets at the end of the tick so we can see
@@ -699,7 +702,7 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
 
 	append(&n.tcp_sessions, TcpSession{
         ip = ip,
-        rcv_wnd = 100, // TODO(ben): This is arbitrary for now!
+        rcv_wnd = 200, // TODO(ben): This is arbitrary for now!
         cwnd = 2*SEG_SIZE, // Start small so we can see slow start.
         received_data = strings.builder_make(),
     })
@@ -764,8 +767,9 @@ tcp_track_ack :: proc(n: ^Node, sess: ^TcpSession, ack: u32) {
 }
 
 batch_ack :: proc(sess: ^TcpSession) {
-    if sess.last_ack_timestamp == 0 {
-        sess.last_ack_timestamp = tick_count
+    if sess.first_ack_timestamp == 0 {
+        sess.first_ack_timestamp = tick_count
+        sess.eventual_ack = 0
     }
     sess.eventual_ack = max(sess.eventual_ack, sess.rcv_nxt)
 }
