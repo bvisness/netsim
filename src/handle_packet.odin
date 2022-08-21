@@ -3,6 +3,9 @@ package main
 import "core:container/queue"
 import "core:fmt"
 
+SEG_SIZE :: 10
+RETRANSMIT_TIMEOUT :: 15 // ticks
+
 COLOR_RST    := Vec3{220, 80, 80}
 COLOR_SYN    := Vec3{80, 80, 220}
 COLOR_ACK    := Vec3{80, 220, 80}
@@ -107,6 +110,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     seq = sess.iss,
                     ack = sess.rcv_nxt,
                     control = TCP_SYN|TCP_ACK,
+                    wnd = sess.rcv_wnd,
                 },
                 color = &COLOR_SYNACK,
             })
@@ -204,9 +208,17 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         seq = sess.snd_nxt,
                         ack = sess.rcv_nxt,
                         control = TCP_ACK,
+                        wnd = sess.rcv_wnd,
                     },
                     color = &COLOR_ACK,
                 })
+
+                // TODO(ben): I don't think the spec explicitly told me to do
+                // this, but it seems like we really should be doing this when
+                // we receive this ACK. Maybe I'm misunderstanding the spec?
+                sess.snd_wnd = p.tcp.wnd
+                sess.snd_wl1 = p.tcp.seq
+                sess.snd_wl2 = p.tcp.ack
 
                 // TODO!
                 /* if there is still data and other control stuff in this segment besides the synack {
@@ -228,6 +240,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         seq = sess.iss,
                         ack = sess.rcv_nxt,
                         control = TCP_SYN|TCP_ACK,
+                        wnd = sess.rcv_wnd,
                     },
                     color = &COLOR_SYNACK,
                 })
@@ -300,6 +313,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     seq = sess.snd_nxt,
                     ack = sess.rcv_nxt,
                     control = TCP_ACK,
+                    wnd = sess.rcv_wnd,
                 },
                 color = &COLOR_ACK,
             })
@@ -354,6 +368,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         seq = sess.snd_nxt,
                         ack = sess.rcv_nxt,
                         control = TCP_ACK,
+                        wnd = sess.rcv_wnd,
                     },
                     color = &COLOR_ACK,
                 })
@@ -413,7 +428,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
             } else if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
                 node_log(n, "Advancing send window.")
                 sess.snd_una = p.tcp.ack
-                // TODO: Clear acknowledged segments from the retransmission queue.
+                tcp_clear_retransmissions(n, sess, p.tcp.ack)
             } else {
                 // ACK for something not yet sent. Ignore, and ACK back at them
                 // to try and sort things out.
@@ -426,6 +441,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                         seq = sess.snd_nxt,
                         ack = sess.rcv_nxt,
                         control = TCP_ACK,
+                        wnd = sess.rcv_wnd,
                     },
                     color = &COLOR_ACK,
                 })
@@ -442,8 +458,10 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         }
 
         // Process the segment's data
-        node_log(n, fmt.aprintf("Received: %s", p.data))
         sess.rcv_nxt += u32(len(p.data))
+        if len(p.data) > 0 {
+            node_log(n, fmt.aprintf("Received: \"%s\"", p.data))
+        }
         if len(p.data) > 0 {
             send_packet(n, Packet{
                 dst_ip = p.src_ip,
@@ -461,6 +479,108 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // TODO: FIN
 
         // TODO: Timeouts (probably not here, but somewhere)
+    }
+}
+
+tcp_open :: proc(n: ^Node, dst_ip: u32) -> (^TcpSession, bool) {
+    if sess_idx, already_connected := get_tcp_session(n, dst_ip); !already_connected {
+        sess_idx, ok := new_tcp_session(n, dst_ip)
+        assert(ok)
+
+        sess := &n.tcp_sessions[sess_idx]
+
+        iss := tcp_initial_sequence_num()
+        syn := Packet{
+            dst_ip = dst_ip,
+            protocol = PacketProtocol.TCP,
+            tcp = PacketTcp{
+                seq = iss,
+                control = TCP_SYN,
+                wnd = sess.rcv_wnd, // TODO(ben): Is this used on SYNs?
+            },
+            color = &COLOR_SYN,
+        }
+        send_packet(n, syn)
+
+        sess.iss = iss
+        sess.snd_una = iss
+        sess.snd_nxt = iss + 1
+
+        sess.state = TcpState.SynSent
+
+        return sess, true
+    } else {
+        return nil, false
+    }
+}
+
+tcp_tick :: proc(n: ^Node) {
+    for sess in &n.tcp_sessions {
+        if sess.state == TcpState.Established {
+            // Send the packet at the front of our send queue (or our retransmission queue...)
+            should_send: bool
+            to_send: Packet
+            for s in sess.retransmit {
+                if tick_count - s.sent_at > s.retry_after {
+                    node_log(n, fmt.aprintf("Retransmitting packet \"%s\" (SEG.SEQ=%d)", s.data, s.seq))
+                    should_send = true
+                    to_send = tcp_data_packet(&sess, s)
+                    break
+                }
+            }
+            if !should_send && len(sess.snd_buffer) > 0 {
+                should_send = true
+                to_send = sess.snd_buffer[0]
+                ordered_remove(&sess.snd_buffer, 0)
+            }
+
+            if should_send {
+                send_packet(n, to_send)
+
+                // Add the sent packet's data to the retransmission queue
+                append(&sess.retransmit, TcpSend{
+                    data = to_send.data,
+                    seq = to_send.tcp.seq,
+                    sent_at = tick_count,
+                    retry_after = RETRANSMIT_TIMEOUT,
+                })
+            }
+
+            // Generate new outgoing packets at the end of the tick so we can see
+            // them all queued up
+            for tcp_send_window_remaining(&sess) >= SEG_SIZE && len(sess.snd_data) > 0 {
+                // Grab a chunk of our output data and put it in our output queue
+                send := TcpSend{
+                    data = sess.snd_data[:min(SEG_SIZE, len(sess.snd_data))],
+                    seq = sess.snd_nxt,
+                }
+                append(&sess.snd_buffer, tcp_data_packet(&sess, send))
+
+                // Update send state
+                sess.snd_data = sess.snd_data[min(SEG_SIZE, len(sess.snd_data)):]
+                sess.snd_nxt += u32(len(send.data))
+            }
+        }
+    }
+}
+
+tcp_send_window_remaining :: proc(sess: ^TcpSession) -> u32 {
+    send_window_end := sess.snd_una + u32(sess.snd_wnd)
+    return send_window_end - sess.snd_nxt
+}
+
+tcp_data_packet :: proc(sess: ^TcpSession, s: TcpSend) -> Packet {
+    return Packet{
+        dst_ip = sess.ip,
+        data = s.data,
+        protocol = PacketProtocol.TCP,
+        tcp = PacketTcp{
+            seq = s.seq,
+            ack = sess.rcv_nxt, // Always ACK because we can
+            control = TCP_ACK,
+            wnd = sess.rcv_wnd,
+        },
+        color = &text_color,
     }
 }
 
@@ -503,7 +623,10 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
 		return 0, false
 	}
 
-	append(&n.tcp_sessions, TcpSession{ip = ip})
+	append(&n.tcp_sessions, TcpSession{
+        ip = ip,
+        rcv_wnd = 20, // TODO(ben): This is arbitrary for now!
+    })
 	return len(n.tcp_sessions) - 1, true
 }
 
@@ -511,11 +634,31 @@ close_tcp_session :: proc(n: ^Node, sess_idx: int) {
 	unordered_remove(&n.tcp_sessions, sess_idx)
 }
 
+tcp_send :: proc(sess: ^TcpSession, data: string) {
+   sess.snd_data = data
+}
+
+tcp_clear_retransmissions :: proc(n: ^Node, sess: ^TcpSession, ack: u32) {
+    // Goofy-looking double for, but it makes for nicer logs and less index confusion on my part.
+    // I don't care that it's quadratic. It doesn't matter.
+    for {
+        for s, i in sess.retransmit {
+            s := sess.retransmit[i]
+            if s.seq + u32(len(s.data)) <= ack {
+                node_log(n, fmt.aprintf("Clearing retransmission of \"%s\"", s.data))
+                ordered_remove(&sess.retransmit, i)
+                continue
+            }
+        }
+        break
+    }
+}
+
 node_log_tcp_packet :: proc(n: ^Node, p: Packet) {
     node_log(n, fmt.aprintf("  SEG: SEQ=%v, ACK=%v, LEN=%v, WND=%v", p.tcp.seq, p.tcp.ack, len(p.data), p.tcp.wnd))
     node_log(n, fmt.aprintf("  Control: %v", control_flag_str(p.tcp.control)))
     if len(p.data) > 0 {
-        node_log(n, fmt.aprintf("  Data: %s", p.data))
+        node_log(n, fmt.aprintf("  Data: \"%s\"", p.data))
     }
 }
 

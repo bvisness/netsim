@@ -155,6 +155,11 @@ TcpSession :: struct {
 	rcv_wnd: u16, // RCV.WND, the size of the receive window (RCV.NXT + RCV.WND = the receive window)
 	// no urgent pointers
 	irs: u32, // IRS, the Initial Receive Sequence Number, or the first sequence number we ACKed
+
+	snd_data: string, // Will be sliced away as stuff is put in the send buffer
+	snd_buffer: [dynamic]Packet,
+	rcv_buffer: [dynamic]Packet,
+	retransmit: [dynamic]TcpSend,
 }
 
 TcpState :: enum {
@@ -169,6 +174,13 @@ TcpState :: enum {
 	Closing,
 	LastAck,
 	TimeWait,
+}
+
+TcpSend :: struct {
+	data: string,
+	seq: u32, // Sequence number of the start of this segment
+	sent_at: int, // Tick number when this packet was originally transmitted.
+	retry_after: int, // Retransmit after this many ticks have elapsed.
 }
 
 make_node :: proc(

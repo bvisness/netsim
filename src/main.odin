@@ -256,7 +256,11 @@ tick :: proc() {
 			queue.pop_front(&node.avg_tick_history)
 		}
 		queue.push_back(&node.avg_tick_history, average_packet_ticks)
- 
+
+		// Process TCP stuff
+		tcp_tick(node)
+
+		// Handle any packets we received
 		nextpacket:
 		for i := 0; i < node.packets_per_tick; i += 1 {
 			// Try to send
@@ -347,58 +351,7 @@ tick :: proc() {
 	// 	}
 	// }
 
-	if tick_count % 1 == 0 {
-		dst_ip := nodes_by_name["discord_1"].interfaces[0].ip
-		if sess_idx, already_connected := get_tcp_session(nodes_by_name["me"], dst_ip); !already_connected {
-			sess_idx, ok := new_tcp_session(nodes_by_name["me"], dst_ip)
-			assert(ok)
-
-			sess := &nodes_by_name["me"].tcp_sessions[sess_idx]
-
-			// HACK: Open up destination for listening
-			dst := nodes_by_name["discord_1"]
-			dst.listening = true
-
-			iss := tcp_initial_sequence_num()
-
-			hello_discord := Packet{
-				dst_ip = dst_ip,
-				protocol = PacketProtocol.TCP,
-				tcp = PacketTcp{
-					seq = iss,
-					control = TCP_SYN,
-				},
-				color = &COLOR_SYN,
-			}
-			send_packet(nodes_by_name["me"], hello_discord)
-
-			sess.iss = iss
-			sess.snd_una = iss
-			sess.snd_nxt = iss + 1
-
-			sess.state = TcpState.SynSent
-		} else {
-			sess := &nodes_by_name["me"].tcp_sessions[sess_idx]
-
-			if sess.state == TcpState.Established {
-				// send le data
-				p := Packet{
-					dst_ip = dst_ip,
-					data = "Hello!",
-					protocol = PacketProtocol.TCP,
-					tcp = PacketTcp{
-						// seq = ???
-						ack = sess.rcv_nxt,
-						control = TCP_ACK,
-						wnd = 10, // excellent choice of window
-					},
-					color = &text_color,
-				}
-				send_packet(nodes_by_name["me"], p)
-				sess.snd_nxt += u32(len(p.data))
-			}
-		}
-	}
+	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], "Hello Handmade Network!")
 
 	// Update stat histories
 	for node in &nodes {
@@ -450,6 +403,18 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 	return nil, false
 }
 
+send_data_via_tcp :: proc(src, dst: ^Node, data: string) -> bool {
+	if sess, ok := tcp_open(src, dst.interfaces[0].ip); ok {
+		// HACK: Open up destination for listening
+		dst.listening = true
+		
+		fmt.printf("Sending data from %s to %s: %s\n", src.name, dst.name, data)
+		tcp_send(sess, data)
+		return true
+	}
+
+	return false
+}
 
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
