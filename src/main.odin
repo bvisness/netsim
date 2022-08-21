@@ -707,7 +707,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					clear_input(0)
 					clear_input(1)
 					clear_input(2)
-					append(&inspect_node.routing_rules, RoutingRule{ip = ip, subnet_mask = subnet, interface_id = val})
+					append(&inspect_node.routing_rules, RoutingRule{ip = ip, subnet_mask = subnet, interface_id = val - 1})
 				}
 			}
 		}
