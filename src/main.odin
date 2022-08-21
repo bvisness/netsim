@@ -676,10 +676,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				if button(rect(rule_left + offset, y, box_height, box_height), "\uf1f8", icon_font) {
 					ordered_remove(&inspect_node.routing_rules, idx)
 				}
+				y += 6
 			}
 
 			next_line(&y)
-			y += 8
+			y += 6
 
 			field_offset : f32 = 0
 			draw_text(ip_head_str, Vec2{rule_left + field_offset, y + (box_height / 2) - (text_height / 2)}, 1, monospace_font, text_color); field_offset += ip_head_width + 5
