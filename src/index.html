@@ -388,6 +388,8 @@
 				window.wasm.set_color_mode(false);
 			}
 
+			window.wasm.load_build_hash(window.wasm.blob_hash);
+
 			function updateCanvasSize() {
 				dpr = window.devicePixelRatio;
 				canvas.width = canvasContainer.getBoundingClientRect().width * dpr;

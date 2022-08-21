@@ -1617,6 +1617,19 @@ function odinSetupDefaultImports(wasmMemoryInterface, consoleElement) {
 	};
 };
 
+// this is a deliberately bad hash.
+function generateHash(blob) {
+	let encoded_blob = new Uint8Array(blob);
+    let hash = 0;
+	let len = encoded_blob.length;
+    for (let i = 0; i < len; i++) {
+        let chr = encoded_blob[i];
+        hash = (hash << 5) - hash + chr;
+        hash |= 0;
+    }
+    return hash;
+}
+
 async function runWasm(wasmPath, consoleElement, extraForeignImports) {
 	let wasmMemoryInterface = new WasmMemoryInterface();
 
@@ -1633,6 +1646,7 @@ async function runWasm(wasmPath, consoleElement, extraForeignImports) {
 	const response = await fetch(wasmPath);
 	const file = await response.arrayBuffer();
 	const wasm = await WebAssembly.instantiate(file, imports);
+
 	exports = wasm.instance.exports;
 	wasmMemoryInterface.setExports(exports);
 	wasmMemoryInterface.setMemory(exports.memory);
@@ -1661,6 +1675,7 @@ async function runWasm(wasmPath, consoleElement, extraForeignImports) {
 
 	const jsExports = {
 		...exports,
+		blob_hash: generateHash(file),
 		odinMem: wasmMemoryInterface,
 	};
 	delete jsExports._start;

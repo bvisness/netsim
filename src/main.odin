@@ -61,9 +61,11 @@ clicked := false
 is_hovering := false
 
 node_selected := -1
+hash := 0
 
 first_frame := true
 muted := false
+running := false
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
@@ -71,8 +73,6 @@ history_size   : int = 50
 log_size       : int = 50
 text_height    : f32 = 0
 line_gap       : f32 = 0
-
-running := false
 
 TICK_INTERVAL_BASE :: 0.7
 TICK_ANIM_DURATION_BASE :: 0.7
@@ -495,6 +495,19 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 	pan += 3 * pan_velocity
 
+	// check intersections
+	for node, idx in &nodes {
+		if pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
+			change_cursor("pointer")
+			if clicked {
+				node_selected = idx
+			}
+
+			is_hovering = true
+			break
+		}
+	}
+
 	if running && t - last_tick_t >= tick_interval {
 		tick()
 	}
@@ -587,18 +600,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 	menu_offset := max_width + (pad_size * 2)
 
-	// check intersections
-	for node, idx in &nodes {
-		if pt_in_rect(mouse_pos, Rect{(node.pos * scale) + pan, Vec2{node_size * scale, node_size * scale}}) {
-			change_cursor("pointer")
-			if clicked {
-				node_selected = idx
-			}
-
-			is_hovering = true
-			break
-		}
-	}
 
 	if node_selected != -1 {
 		inspect_node := nodes[node_selected]
@@ -683,7 +684,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			next_line(&y)
 
-			log_lines := 45
+			log_lines := 65
 			outline_width : f32 = 2
 			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 			draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
@@ -701,7 +702,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
 			iter_end := queue.len(inspect_node.logs) - 1
 
-			current_tick := 0
+			current_tick := -1
 			tick_changed := false
 			time_str := ""
 			time_width : f32 = 0
@@ -767,6 +768,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if !is_hovering {
 		change_cursor("auto")
 	}
+
+	hash_str := fmt.tprintf("Build: 0x%X", abs(hash))
+	hash_width := measure_text(hash_str, 1, monospace_font)
+	draw_text(hash_str, Vec2{width - hash_width - 10, height - text_height - 10}, 1, monospace_font, text_color2)
 
 	remove_packets(&exiting_packets, dead_packets[:])
     return true
