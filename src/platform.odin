@@ -99,3 +99,13 @@ scaled_line :: proc(x1, y1, x2, y2, r, g, b, a, width: f32) {
 scaled_text :: proc(text: string, x, y: f32, font: string, r, g, b, a: f32) {
 	canvas_text(text, (x * scale) + pan.x, (y * scale) + pan.y, r, g, b, a, scale, font)
 }
+
+play_doot :: proc() {
+	if muted {
+		return
+	}
+
+	tones := []f32{ 392, 440, 493.88, 523.25, 587.33, 659.25, 739.99 }
+	idx := rand_int(0, len(tones) - 1)
+	play_tone(tones[idx])
+}

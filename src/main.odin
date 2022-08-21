@@ -28,6 +28,7 @@ min_height  : f32 = 10000
 max_width   : f32 = 0
 max_height  : f32 = 0
 text_height : f32 = 16
+line_gap :    f32 = 3
 
 bg_color      := Vec3{}
 text_color    := Vec3{}
@@ -48,15 +49,24 @@ mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
 pan            := Vec2{}
 scroll_velocity: f32 = 0
+
+log_scroll_y   : f32 = 0
+
 is_mouse_down := false
+was_mouse_down := false
 clicked := false
 
 node_selected := -1
+muted := false
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
 buffer_size    : int = 15
 history_size   : int = 50
+log_size       : int = 50
+
+tick_count := 0
+last_tick_t := t
 running := false
 
 TICK_INTERVAL_BASE :: 0.7
@@ -64,7 +74,6 @@ TICK_ANIM_DURATION_BASE :: 0.7
 NEW_ANIM_DURATION_BASE :: 0.3
 DONE_ANIM_DURATION_BASE :: 0.8
 DROPPED_ANIM_DURATION :: 1.2
-tones := []f32{ 392, 440, 493.88, 523.25, 587.33, 659.25, 739.99 }
 
 timescale: f32
 tick_interval: f32
@@ -297,23 +306,6 @@ tick :: proc() {
 		queue.push_back(&send.dst.buffer, packet)
 	}
 
-	// Update stat histories
-	for node in &nodes {
-		if queue.len(node.avg_recv_history) >= history_size {
-			queue.pop_front(&node.avg_recv_history)
-		}
-		if queue.len(node.avg_sent_history) >= history_size {
-			queue.pop_front(&node.avg_sent_history)
-		}
-		if queue.len(node.avg_drop_history) >= history_size {
-			queue.pop_front(&node.avg_drop_history)
-		}
-
-		queue.push_back(&node.avg_recv_history, u32(node.received - node.old_received))
-		queue.push_back(&node.avg_sent_history, u32(node.sent - node.old_sent))
-		queue.push_back(&node.avg_drop_history, u32(node.dropped - node.old_dropped))
-	}
-
 	// And extra fun stuff we do on each tick for testing:
 
 	// Generate random packets, huzzah
@@ -371,6 +363,23 @@ tick :: proc() {
 			}
 		}
 	}
+
+	// Update stat histories
+	for node in &nodes {
+		if queue.len(node.avg_recv_history) >= history_size {
+			queue.pop_front(&node.avg_recv_history)
+		}
+		if queue.len(node.avg_sent_history) >= history_size {
+			queue.pop_front(&node.avg_sent_history)
+		}
+		if queue.len(node.avg_drop_history) >= history_size {
+			queue.pop_front(&node.avg_drop_history)
+		}
+
+		queue.push_back(&node.avg_recv_history, u32(node.received - node.old_received))
+		queue.push_back(&node.avg_sent_history, u32(node.sent - node.old_sent))
+		queue.push_back(&node.avg_drop_history, u32(node.dropped - node.old_dropped))
+	}
 }
 
 drop_packet :: proc(packet: Packet, drop_at_dst: bool = false) {
@@ -405,10 +414,6 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 	return nil, false
 }
 
-tick_count := 0
-last_tick_t := t
-
-was_mouse_down := false
 
 @export
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
@@ -421,22 +426,24 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 	defer was_mouse_down = is_mouse_down
 	defer clicked = false
+	defer scroll_velocity = 0
 
     t += dt
 
-	// compute scroll
-	scale *= 1 + (0.05 * scroll_velocity * dt)
-	if scale < 0.1 {
-		scale = 0.1
-	} else if scale > 1.5 {
-		scale = 1.5
+	// compute graph scale
+	if pt_in_rect(mouse_pos, rect(0, toolbar_height, max_width, height)) {
+		scale *= 1 + (0.05 * scroll_velocity * dt)
+		if scale < 0.1 {
+			scale = 0.1
+		} else if scale > 1.5 {
+			scale = 1.5
+		}
 	}
-	scroll_velocity = 0
 
 	// compute pan
 	pan_velocity := Vec2{}
 	if is_mouse_down {
-		if clicked_pos.x < max_width && clicked_pos.x > 0 && clicked_pos.y < height && clicked_pos.y > toolbar_height {
+		if pt_in_rect(clicked_pos, rect(0, toolbar_height, max_width, height)) {
 			pan_velocity.x = mouse_pos.x - last_mouse_pos.x
 			pan_velocity.y = mouse_pos.y - last_mouse_pos.y
 		}
@@ -509,8 +516,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					packet.dropped_t = t
 					packet.initialized_drop_at_dst = true
 
-					idx := rand_int(0, len(tones) - 1)
-					play_tone(tones[idx])
+					play_doot()
 				}
 
 				packet.velocity += Vec2{0, 180} * dt
@@ -551,7 +557,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		y: f32 = 0
 		next_line := proc(y: ^f32) -> f32 {
 			res := y^
-			y^ += text_height + 4
+			y^ += text_height + line_gap
 			return res
 		}
 
@@ -585,7 +591,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// render history graph
 		graph_top := next_line(&y) + pad_size
 		graph_size : f32 = 200
-		graph_gap : f32 = (text_height + 4) * 2
+		graph_gap : f32 = (text_height + line_gap) * 2
 		draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, menu_offset, graph_top, graph_size)
 		draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
 		draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
@@ -594,6 +600,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		// render logs and debug info
 		{
 			logs_left: f32 = menu_offset + 500
+			logs_size: f32 = 500
 
 			y = pad_size + toolbar_height
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
@@ -602,29 +609,50 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					continue
 				}
 				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  State: %v", sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  SND.UNA: %v", sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  SND.NXT: %v", sess.send_next), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  SND.WND: %v", sess.send_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  ISS: %v", sess.initial_send_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  RCV.NXT: %v", sess.receive_next), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  RCV.WND: %v", sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  IRS: %v", sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.send_next, sess.send_window, sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.receive_next, sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.initial_send_seq_num, sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 
 			next_line(&y)
 
-			log_lines := max(int((height - (pad_size * 2) - y) / (text_height + 4)), 0)
+			log_lines := 45
 			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
-			if len(inspect_node.logs) > log_lines {
+			if queue.len(inspect_node.logs) > log_lines {
 				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
-			for msg in inspect_node.logs[max(0, len(inspect_node.logs)-log_lines):] {
-				draw_text(msg, Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+
+			iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
+			iter_end := queue.len(inspect_node.logs) - 1
+
+			current_tick := 0
+			tick_changed := false
+			time_str := ""
+			time_width : f32 = 0
+			time_gap : f32 = 10
+			for i := iter_start; i <= iter_end; i += 1 {
+				msg := queue.get(&inspect_node.logs, i)
+
+				if msg.timestamp != current_tick {
+					current_tick = msg.timestamp
+					tick_changed = true
+
+					time_str = fmt.tprintf("%d", msg.timestamp)
+					time_width = measure_text(time_str, 1, monospace_font)
+				}
+
+				if tick_changed {
+					y += (text_height / 2)
+					draw_text(time_str, Vec2{logs_left, y}, 1, monospace_font, text_color)
+				}
+				draw_text(msg.content, Vec2{logs_left + time_width + time_gap, next_line(&y)}, 1, monospace_font, text_color2)
+
+				tick_changed = false
 			}
 		}
 	}
 
+	// draw legend
 	top_pad := toolbar_height + 20
 	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*0}, packet_size, COLOR_SYN)
 	draw_circle(Vec2{20 + packet_size, top_pad+packet_size+20*1}, packet_size, COLOR_ACK)
@@ -637,20 +665,24 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	draw_text("RST",    Vec2{38, top_pad+20*3}, 1, default_font, text_color)
 	draw_text("DATA",   Vec2{38, top_pad+20*4}, 1, default_font, text_color)
 
+	// draw toolbar
 	edge_pad : f32 = 10
 	button_height : f32 = 30
 	button_width  : f32 = 30
+	button_pad    : f32 = 8
 	if button(rect(edge_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), running ? "\uf04c" : "\uf04b", icon_font) {
 		running = !running
 	}
 	if !running {
-		if button(rect(edge_pad + button_width + 8, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
+		if button(rect(edge_pad + button_width + button_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
 			tick()
 		}
 	}
+	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), muted ? "\uf028" : "\uf026", icon_font) {
+		muted = !muted
+	}
 
 	remove_packets(&exiting_packets, dead_packets[:])
-
     return true
 }
 
@@ -717,7 +749,7 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	center_offset := (size / 2) - (text_width / 2)
 	draw_text(header, Vec2{x + center_offset, y}, 1, default_font, text_color2)
 
-	graph_top := y + text_height + 4
+	graph_top := y + text_height + line_gap
 	draw_line(Vec2{x, graph_top}, Vec2{x + size, graph_top}, 3, line_color)
 	draw_line(Vec2{x, graph_top}, Vec2{x, graph_top + size}, 3, line_color)
 	draw_line(Vec2{x + size, graph_top}, Vec2{x + size, graph_top + size}, 3, line_color)
@@ -728,11 +760,11 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 
 	if queue.len(history^) > 1 {
 		high_str := fmt.tprintf("%d", max_val)
-		high_width := measure_text(high_str, 1, default_font) + 3
+		high_width := measure_text(high_str, 1, default_font) + line_gap
 		draw_text(high_str, Vec2{(x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color2)
 
 		low_str := fmt.tprintf("%d", min_val)
-		low_width := measure_text(low_str, 1, default_font) + 3
+		low_width := measure_text(low_str, 1, default_font) + line_gap
 		draw_text(low_str, Vec2{(x - 5) - low_width, graph_top + size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color2)
 	}
 

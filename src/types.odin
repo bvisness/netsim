@@ -12,7 +12,7 @@ Rect :: struct {
 }
 
 Node :: struct {
-	logs: [dynamic]string, // DO NOT MOVE ELSEWHERE IN THE STRUCT
+	logs: queue.Queue(LogEntry), // DO NOT MOVE ELSEWHERE IN THE STRUCT
 
 	pos: Vec2,
 
@@ -39,6 +39,11 @@ Node :: struct {
 
 	listening: bool,
 	tcp_sessions: [10]TcpSession,
+}
+
+LogEntry :: struct {
+	timestamp: int,
+	content: string,
 }
 
 Interface :: struct {
@@ -176,7 +181,6 @@ make_node :: proc(
 		interfaces = interfaces,
 		routing_rules = routing_rules,
 		packets_per_tick = packets_per_tick,
-		logs = make([dynamic]string),
 	}
 
 	if ok := queue.init(&n.buffer, buffer_size); !ok {
@@ -200,12 +204,20 @@ make_node :: proc(
 		fmt.println("Successfully failed to init stat queue.")
 		intrinsics.trap()
 	}
+	if ok := queue.init(&n.logs, log_size); !ok {
+		fmt.println("Successfully failed to init log queue.")
+		intrinsics.trap()
+	}
 
 	return n
 }
 
 node_log :: proc(n: ^Node, msg: string) {
-	append(&n.logs, msg)
+	if queue.len(n.logs) > log_size {
+		queue.pop_front(&n.logs)
+	}
+
+	queue.push_back(&n.logs, LogEntry{tick_count, msg})
 }
 
 control_flag_str :: proc(f: u16) -> string {
