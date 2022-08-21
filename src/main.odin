@@ -636,7 +636,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			logs_width: f32 = 600
 
 			y = pad_size + toolbar_height
-			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
+			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 			for sess in inspect_node.tcp_sessions {
 				if sess.ip == 0 {
 					continue
@@ -651,7 +651,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			log_lines := 48
 			outline_width : f32 = 2
-			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1, default_font, text_color)
+			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 			draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
 
 			draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, outline_color)
