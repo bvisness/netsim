@@ -440,6 +440,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// This is nasty code that allows me to do load-time things once the wasm context is init
 	if first_frame {
 		random_seed = u64(get_time())
+		fmt.printf("Seed is 0x%X\n", random_seed)
+
 		rand.set_global_seed(random_seed)
 		get_session_storage("muted")
 		first_frame = false
