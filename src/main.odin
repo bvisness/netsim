@@ -76,6 +76,9 @@ history_size   : int = 50
 log_size       : int = 50
 text_height    : f32 = 0
 line_gap       : f32 = 0
+graph_cols     :: 3
+graph_size     :: 150
+graph_gap      : f32 = 0
 
 
 TICK_INTERVAL_BASE :: 0.7
@@ -261,7 +264,7 @@ tick :: proc() {
 
 			average_packet_ticks /= u32(queue.len(node.buffer))
 		}
-		for ; queue.len(node.avg_tick_history) >= history_size; {
+		for queue.len(node.avg_tick_history) >= history_size {
 			queue.pop_front(&node.avg_tick_history)
 		}
 		queue.push_back(&node.avg_tick_history, average_packet_ticks)
@@ -368,6 +371,8 @@ tick :: proc() {
 	// }
 
 	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], GETTYSBURG)
+	send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
+	send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], MUCH_ADO)
 
 	// Update stat histories
 	for node in &nodes {
@@ -459,6 +464,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	defer is_hovering = false
 
     t += dt
+
+	graph_gap = (text_height + line_gap) * 2
 
 	// compute graph scale
 	if pt_in_rect(mouse_pos, rect(0, toolbar_height, max_width, height)) {
@@ -622,15 +629,35 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		draw_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 		draw_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
-		// render history graph
-		graph_top := next_line(&y) + pad_size
-		graph_size : f32 = 200
-		graph_gap : f32 = (text_height + line_gap) * 2
-		draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, menu_offset, graph_top, graph_size)
-		draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, menu_offset + graph_size + graph_gap, graph_top, graph_size)
-		draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, menu_offset, graph_top + graph_size + graph_gap, graph_size)
-		draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, menu_offset + graph_size + graph_gap, graph_top + graph_size + graph_gap, graph_size)
-		y += ((graph_size + graph_gap) * 2) + graph_gap
+		// render history graphs
+		{
+			graph_pos := Vec2{menu_offset, next_line(&y) + pad_size}
+
+			gi := 0
+			next_graph_offset := proc(gi: ^int, y: ^f32) -> Vec2 {
+				gx := f32(gi^ % graph_cols) * (graph_size + graph_gap)
+				gy := f32(gi^ / graph_cols) * (graph_size + graph_gap)
+				res := Vec2{gx, gy}
+				
+				if gi^ % graph_cols == 0 {
+					y^ += graph_size + graph_gap
+				}
+				gi^ += 1
+				
+				return res
+			}
+
+			draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, graph_pos + next_graph_offset(&gi, &y))
+			for sess, i in &inspect_node.tcp_sessions {
+				draw_graph(fmt.tprintf("Session %d Congestion Window", i+1), &sess.cwnd_history, graph_pos + next_graph_offset(&gi, &y))
+				draw_graph(fmt.tprintf("Session %d Retransmit Queue", i+1), &sess.retransmit_history, graph_pos + next_graph_offset(&gi, &y))
+			}
+			next_line(&y)
+			next_line(&y)
+		}
 
 		// render rule viewer
 		{
@@ -727,6 +754,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.snd_nxt, sess.snd_wnd, sess.snd_una), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.rcv_nxt, sess.rcv_wnd), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.iss, sess.irs), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  CWND: %v, SENT=%v, ACKED=%v", sess.cwnd, sess.cwnd_sent, sess.cwnd_acked), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 				if strings.builder_len(sess.received_data) > 0 {
 					data := strings.to_string(sess.received_data)
 					line_width := 64
@@ -922,7 +950,7 @@ clear_input :: proc(infield_idx: int) {
 	infield.cursor = 0
 }
 
-draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
+draw_graph :: proc(header: string, history: ^queue.Queue(u32), pos: Vec2) {
 	line_width : f32 = 1
 	graph_edge_pad : f32 = 15
 
@@ -936,28 +964,28 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 	max_range := max_val - min_val
 
 	text_width := measure_text(header, 1, default_font)
-	center_offset := (size / 2) - (text_width / 2)
-	draw_text(header, Vec2{x + center_offset, y}, 1, default_font, text_color)
+	center_offset := (graph_size / 2) - (text_width / 2)
+	draw_text(header, Vec2{pos.x + center_offset, pos.y}, 1, default_font, text_color)
 
-	graph_top := y + text_height + line_gap
-	draw_rect(rect(x, graph_top, size, size), 0, bg_color2)
-	draw_rect_outline(rect(x, graph_top, size, size), 2, outline_color)
+	graph_top := pos.y + text_height + line_gap
+	draw_rect(rect(pos.x, graph_top, graph_size, graph_size), 0, bg_color2)
+	draw_rect_outline(rect(pos.x, graph_top, graph_size, graph_size), 2, outline_color)
 
-	draw_line(Vec2{x - 5, graph_top + size - graph_edge_pad}, Vec2{x + 5, graph_top + size - graph_edge_pad}, 1, graph_color)
-	draw_line(Vec2{x - 5, graph_top + graph_edge_pad}, Vec2{x + 5, graph_top + graph_edge_pad}, 1, graph_color)
+	draw_line(Vec2{pos.x - 5, graph_top + graph_size - graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_size - graph_edge_pad}, 1, graph_color)
+	draw_line(Vec2{pos.x - 5, graph_top + graph_edge_pad}, Vec2{pos.x + 5, graph_top + graph_edge_pad}, 1, graph_color)
 
 	if queue.len(history^) > 1 {
 		high_str := fmt.tprintf("%d", max_val)
 		high_width := measure_text(high_str, 1, default_font) + line_gap
-		draw_text(high_str, Vec2{(x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color)
+		draw_text(high_str, Vec2{(pos.x - 5) - high_width, graph_top + graph_edge_pad - (text_height / 2) + 1}, 1, default_font, text_color)
 
 		low_str := fmt.tprintf("%d", min_val)
 		low_width := measure_text(low_str, 1, default_font) + line_gap
-		draw_text(low_str, Vec2{(x - 5) - low_width, graph_top + size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color)
+		draw_text(low_str, Vec2{(pos.x - 5) - low_width, graph_top + graph_size - graph_edge_pad - (text_height / 2) + 2}, 1, default_font, text_color)
 	}
 
-	graph_y_bounds := size - (graph_edge_pad * 2)
-	graph_x_bounds := size - graph_edge_pad
+	graph_y_bounds := graph_size - (graph_edge_pad * 2)
+	graph_x_bounds := graph_size - graph_edge_pad
 
 	last_x : f32 = 0
 	last_y : f32 = 0
@@ -974,8 +1002,8 @@ draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) 
 			point_y_offset = f32(entry - min_val) * (graph_y_bounds / f32(max_range))
 		}
 
-		point_x := x + point_x_offset + (graph_edge_pad / 2)
-		point_y := graph_top + size - point_y_offset - graph_edge_pad
+		point_x := pos.x + point_x_offset + (graph_edge_pad / 2)
+		point_y := graph_top + graph_size - point_y_offset - graph_edge_pad
 
 		if queue.len(history^) > 1  && i > 0 {
 			draw_line(Vec2{last_x, last_y}, Vec2{point_x, point_y}, line_width, graph_color)

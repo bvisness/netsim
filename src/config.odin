@@ -100,8 +100,7 @@ net_config := `
 			"interfaces": [ "2.2.2.123" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 }
-			],
-			"buffer_size": 5
+			]
 		},
 		{
 			"name": "comcast",
@@ -113,7 +112,7 @@ net_config := `
 				{ "ip": "4.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 },
 				{ "ip": "5.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 }
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 1
 		},
 		{
 			"name": "google",
@@ -124,7 +123,7 @@ net_config := `
 				{ "ip": "4.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0",   "interface": 1 }
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 1
 		},
 		{
 			"name": "cloudflare",
@@ -135,7 +134,7 @@ net_config := `
 				{ "ip": "3.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "5.0.0.0", "subnet": "255.0.0.0", "interface": 2 }
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 1
 		},
 		{
 			"name": "discord_hub",
@@ -190,7 +189,7 @@ net_config := `
 			"name": "comcast_cloudflare",
 			"src": { "node_id": 1, "interface_id": 2 },
 			"dst": { "node_id": 3, "interface_id": 0 },
-			"loss_factor": 0.1
+			"loss_factor": 0
 		},
 		{
 			"name": "google_cloudflare",

@@ -184,10 +184,17 @@ TcpSession :: struct {
 	// no urgent pointers
 	irs: u32, // IRS, the Initial Receive Sequence Number, or the first sequence number we ACKed
 
+	cwnd: u32, // The number of bytes we can put into the network before receiving any ACK.
+	cwnd_sent: u32, // The number of bytes sent since the last CWND update.
+	cwnd_acked: u32, // The number of bytes ACKed since the last CWND update. When this reaches CWND, CWND will be increased.
+	last_ack_timestamp: int, // The tick count of the last time we received an ACK.
+	cwnd_history: queue.Queue(u32),
+
 	snd_data: string, // Will be sliced away as stuff is put in the send buffer
 	snd_buffer: [dynamic]Packet,
 	rcv_buffer: [dynamic]Packet,
 	retransmit: [dynamic]TcpSend,
+	retransmit_history: queue.Queue(u32),
 
 	received_data: strings.Builder,
 }
@@ -211,6 +218,7 @@ TcpSend :: struct {
 	seq: u32, // Sequence number of the start of this segment
 	sent_at: int, // Tick number when this packet was originally transmitted.
 	retry_after: int, // Retransmit after this many ticks have elapsed.
+	retries: int,
 }
 
 make_node :: proc(
