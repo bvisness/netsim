@@ -194,6 +194,8 @@
 					log_error(p, len) {
 						console.error(window.wasm.odinMem.loadString(p, len));
 					},
+
+					// Misc
 					play_tone(freq) {
 						if (audio_ctx.state !== 'running') {
 							return;
@@ -208,10 +210,25 @@
 						amp.gain.setTargetAtTime(0, audio_ctx.currentTime + (end_time / 2), 0.015);
 						tone.start(audio_ctx.currentTime);
 						tone.stop(audio_ctx.currentTime + end_time);
+					},
+					get_session_storage(k, klen) {
+						let key = window.wasm.odinMem.loadString(k, klen);
+						let data = sessionStorage.getItem(key);
+						window.wasm.loaded_session_result(k, klen, ...str(data));
+					},
+					set_session_storage(k, klen, v, vlen) {
+						let key = window.wasm.odinMem.loadString(k, klen);
+						let val = window.wasm.odinMem.loadString(v, vlen);
+
+						sessionStorage.setItem(key, val);
 					}
 				},
 			});
 
+			let ret = sessionStorage.getItem("muted");
+			if (ret !== "true" && ret !== "false") {
+				sessionStorage.setItem("muted", "false");
+			}
 
 			let awake = false;
 			function wakeUp() {
@@ -304,8 +321,6 @@
 					|| e.code == 'KeyA'
 					|| e.code == 'KeyZ'
 				) {
-					window.wasm.odinMem.putString(window.wasm.textInputBuf, e.key);
-					window.wasm.odinMem.putString(window.wasm.keyCodeBuf, e.code);
 					window.wasm.text_input(...str(e.key), ...str(e.code));
 					e.preventDefault();
 				}
@@ -319,11 +334,8 @@
 			});
 
 			window.addEventListener('paste', e => {
-				window.wasm.odinMem.putString(
-					window.wasm.textInputBuf,
-					e.clipboardData.getData('text/plain')
-				);
-				window.wasm.text_input();
+				let clipdata = str(e.clipboardData.getData('text/plain'));
+				window.wasm.text_input(...clipdata);
 				wakeUp();
 			});
 			canvas.addEventListener('wheel', e => {
@@ -343,7 +355,7 @@
 
 				window.wasm.scroll(x, y);
 				wakeUp();
-			});
+			}, { passive: false });
 			window.addEventListener('blur', () => {
 				window.wasm.blur();
 				wakeUp();

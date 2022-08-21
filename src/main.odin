@@ -56,6 +56,7 @@ is_mouse_down := false
 was_mouse_down := false
 clicked := false
 
+first_frame := true
 node_selected := -1
 muted := false
 
@@ -173,6 +174,7 @@ main :: proc() {
 tick :: proc() {	
 	defer last_tick_t = t
 	defer tick_count += 1
+
 
 	PacketSend :: struct {
 		packet: Packet,
@@ -419,6 +421,11 @@ get_connected_node :: proc(my_node_id, my_interface_id: int) -> (^Node, bool) {
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
 	defer free_all(context.temp_allocator)
+	defer first_frame = false
+
+	if first_frame {
+		get_session_storage("muted")
+	}
 
 	if !was_mouse_down && is_mouse_down {
 		clicked = true
@@ -680,6 +687,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), muted ? "\uf028" : "\uf026", icon_font) {
 		muted = !muted
+		set_session_storage("muted", muted ? "true": "false")
 	}
 
 	remove_packets(&exiting_packets, dead_packets[:])

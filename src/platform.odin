@@ -53,6 +53,15 @@ temp_allocate :: proc(n: int) -> rawptr {
     return mem.alloc(n, mem.DEFAULT_ALIGNMENT, context.temp_allocator)
 }
 
+// This is gross..
+@export
+loaded_session_result :: proc(key, val: string) {
+	switch key {
+	case "muted":
+		muted = (val == "true")
+	}
+}
+
 foreign import "js"
 
 foreign js {
@@ -64,11 +73,14 @@ foreign js {
     canvas_line :: proc(x1, y1, x2, y2: f32, r, g, b, a: f32, strokeWidth: f32) ---
     canvas_arc :: proc(x, y, radius, angleStart, angleEnd: f32, r, g, b, a: f32, strokeWidth: f32) ---
     measure_text :: proc(str: string, scale: f32, font: string) -> f32 ---
-    play_tone :: proc(freq: f32) ---
+	get_session_storage :: proc(key: string) ---
+	set_session_storage :: proc(key: string, val: string) ---
 
     debugger :: proc() ---
     log_string :: proc(str: string) ---
     log_error :: proc(str: string) ---
+
+    play_tone :: proc(freq: f32) ---
 }
 
 draw_rect :: proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {
