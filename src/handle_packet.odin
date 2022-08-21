@@ -28,21 +28,21 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // CLOSED state (3.10.7.1)
 
         // RSTs are ignored while closed; we're already closed.
-        if p.tcp.control_flags&TCP_RST != 0 {
+        if p.tcp.control&TCP_RST != 0 {
             return
         }
 
         // Any other packet causes a RST to be sent in return. The details of
         // the sequence and ack numbers are weird and I just trust the spec.
-        if p.tcp.control_flags&TCP_ACK == 0 {
+        if p.tcp.control&TCP_ACK == 0 {
             node_log(n, "Received a packet while closed (case 1).")
             send_packet(n, Packet{
                 dst_ip = p.src_ip,
                 protocol = PacketProtocol.TCP,
                 tcp = PacketTcp{
-                    sequence_number = 0,
-                    ack_number = p.tcp.sequence_number + u32(len(p.data)),
-                    control_flags = TCP_RST|TCP_ACK,
+                    seq = 0,
+                    ack = p.tcp.seq + u32(len(p.data)),
+                    control = TCP_RST|TCP_ACK,
                 },
                 color = &COLOR_RST,
             })
@@ -52,8 +52,8 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 dst_ip = p.src_ip,
                 protocol = PacketProtocol.TCP,
                 tcp = PacketTcp{
-                    sequence_number = p.tcp.ack_number,
-                    control_flags = TCP_RST,
+                    seq = p.tcp.ack,
+                    control = TCP_RST,
                 },
                 color = &COLOR_RST,
             })
@@ -63,19 +63,19 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // LISTEN state (3.10.7.2)
 
         // RSTs are ignored; they could not possibly be relevant since we haven't sent anything.
-        if p.tcp.control_flags&TCP_RST != 0 {
+        if p.tcp.control&TCP_RST != 0 {
             return
         }
 
         // ACKs are no good if we're in LISTEN; we haven't sent anything to be ACKed!
         // Send a RST.
-        if p.tcp.control_flags&TCP_ACK != 0 {
+        if p.tcp.control&TCP_ACK != 0 {
             send_packet(n, Packet{
                 dst_ip = p.src_ip,
                 protocol = PacketProtocol.TCP,
                 tcp = PacketTcp{
-                    sequence_number = p.tcp.ack_number,
-                    control_flags = TCP_RST,
+                    seq = p.tcp.ack,
+                    control = TCP_RST,
                 },
                 color = &COLOR_RST,
             })
@@ -83,7 +83,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         }
 
         // SYNs mean we're starting up a new connection.
-        if p.tcp.control_flags&TCP_SYN != 0 {
+        if p.tcp.control&TCP_SYN != 0 {
             sess_idx, ok := new_tcp_session(n, p.src_ip)
             if !ok {
                 // Out of resources! Die.
@@ -93,26 +93,26 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
 
             // No security concerns here.
 
-            sess.initial_receive_seq_num = p.tcp.sequence_number
-            sess.receive_next = p.tcp.sequence_number + 1
+            sess.irs = p.tcp.seq
+            sess.rcv_nxt = p.tcp.seq + 1
 
             // TODO: Queue any data in this packet to be processed later.
             // The sender can include data in the initial SYN packet.
 
-            sess.initial_send_seq_num = tcp_initial_sequence_num()
+            sess.iss = tcp_initial_sequence_num()
             send_packet(n, Packet{
                 dst_ip = p.src_ip,
                 protocol = PacketProtocol.TCP,
                 tcp = PacketTcp{
-                    sequence_number = sess.initial_send_seq_num,
-                    ack_number = sess.receive_next,
-                    control_flags = TCP_SYN|TCP_ACK,
+                    seq = sess.iss,
+                    ack = sess.rcv_nxt,
+                    control = TCP_SYN|TCP_ACK,
                 },
                 color = &COLOR_SYNACK,
             })
 
-            sess.send_unacknowledged = sess.initial_send_seq_num
-            sess.send_next = sess.initial_send_seq_num + 1
+            sess.snd_una = sess.iss
+            sess.snd_nxt = sess.iss + 1
 
             node_log(n, "Moving from LISTEN to SYN-RECEIVED")
             sess.state = TcpState.SynReceived
@@ -135,9 +135,9 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
     if sess.state == TcpState.SynSent {
         // SYN-SENT (3.10.7.3)
 
-        is_syn := p.tcp.control_flags&TCP_SYN != 0
-        is_ack := p.tcp.control_flags&TCP_ACK != 0
-        is_rst := p.tcp.control_flags&TCP_RST != 0
+        is_syn := p.tcp.control&TCP_SYN != 0
+        is_ack := p.tcp.control&TCP_ACK != 0
+        is_rst := p.tcp.control&TCP_RST != 0
 
         // Handle an ACK, specifically a bad one. Since we sent the initial
         // SYN, we're expecting an ACK back, but also expecting a SYN. All the
@@ -146,7 +146,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
             // All ACKs must be for data in our unacknowledged window; that is,
             // between the last un-ACKed seq number and the next one we're gonna
             // send. Anything outside this triggers a RST.
-            bad_ack := p.tcp.ack_number <= sess.initial_send_seq_num || p.tcp.ack_number > sess.send_next // TODO(mod)
+            bad_ack := p.tcp.ack <= sess.iss || p.tcp.ack > sess.snd_nxt // TODO(mod)
             if bad_ack {
                 if is_rst {
                     return // Don't RST a RST.
@@ -158,8 +158,8 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     dst_ip = p.src_ip,
                     protocol = PacketProtocol.TCP,
                     tcp = PacketTcp{
-                        sequence_number = p.tcp.ack_number,
-                        control_flags = TCP_RST,
+                        seq = p.tcp.ack,
+                        control = TCP_RST,
                     },
                     color = &COLOR_RST,
                 })
@@ -185,14 +185,14 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
 
         // Handle a SYN, and maybe a SYNACK
         if is_syn {
-            sess.initial_receive_seq_num = p.tcp.sequence_number
-            sess.receive_next = p.tcp.sequence_number + 1
+            sess.irs = p.tcp.seq
+            sess.rcv_nxt = p.tcp.seq + 1
             if is_ack {
-                sess.send_unacknowledged = p.tcp.ack_number
+                sess.snd_una = p.tcp.ack
                 // TODO: Advance past any segments that need to be retried.
             }
 
-            if sess.send_unacknowledged > sess.initial_send_seq_num {
+            if sess.snd_una > sess.iss {
                 // The SYN we sent has been ACKed, plus we got a SYN in return.
                 // We can ACK back, and at this point we're established.
                 node_log(n, "Our SYN has been ACKed. Moved from SYN-SENT to ESTABLISHED.")
@@ -201,9 +201,9 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     dst_ip = p.src_ip,
                     protocol = PacketProtocol.TCP,
                     tcp = PacketTcp{
-                        sequence_number = sess.send_next,
-                        ack_number = sess.receive_next,
-                        control_flags = TCP_ACK,
+                        seq = sess.snd_nxt,
+                        ack = sess.rcv_nxt,
+                        control = TCP_ACK,
                     },
                     color = &COLOR_ACK,
                 })
@@ -225,16 +225,16 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     dst_ip = p.src_ip,
                     protocol = PacketProtocol.TCP,
                     tcp = PacketTcp{
-                        sequence_number = sess.initial_send_seq_num,
-                        ack_number = sess.receive_next,
-                        control_flags = TCP_SYN|TCP_ACK,
+                        seq = sess.iss,
+                        ack = sess.rcv_nxt,
+                        control = TCP_SYN|TCP_ACK,
                     },
                     color = &COLOR_SYNACK,
                 })
 
-                sess.send_window = p.tcp.window
-                sess.last_window_update_seq_num = p.tcp.sequence_number
-                sess.last_window_update_ack_num = p.tcp.ack_number
+                sess.snd_wnd = p.tcp.wnd
+                sess.snd_wl1 = p.tcp.seq
+                sess.snd_wl2 = p.tcp.ack
 
                 // TODO: Queue other controls and data for processing when ESTABLISHED.
 
@@ -258,36 +258,36 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // window, if not in order). This has four cases because of zeroes.
         acceptable: bool
         unacceptable_case: int
-        if len(p.data) == 0 && sess.receive_window == 0 {
-            acceptable = p.tcp.sequence_number == sess.receive_next
+        if len(p.data) == 0 && sess.rcv_wnd == 0 {
+            acceptable = p.tcp.seq == sess.rcv_nxt
             unacceptable_case = 1
-        } else if len(p.data) == 0 && sess.receive_window > 0 {
-            acceptable = sess.receive_next <= p.tcp.sequence_number && p.tcp.sequence_number < sess.receive_next + u32(sess.receive_window) // TODO(mod)
+        } else if len(p.data) == 0 && sess.rcv_wnd > 0 {
+            acceptable = sess.rcv_nxt <= p.tcp.seq && p.tcp.seq < sess.rcv_nxt + u32(sess.rcv_wnd) // TODO(mod)
             unacceptable_case = 2
-        } else if len(p.data) > 0 && sess.receive_window == 0 {
+        } else if len(p.data) > 0 && sess.rcv_wnd == 0 {
             acceptable = false
             unacceptable_case = 3
-        } else if len(p.data) > 0 && sess.receive_window > 0 {
-            segStart := p.tcp.sequence_number
-            segEnd := p.tcp.sequence_number + u32(len(p.data))
+        } else if len(p.data) > 0 && sess.rcv_wnd > 0 {
+            segStart := p.tcp.seq
+            segEnd := p.tcp.seq + u32(len(p.data))
             acceptable = (
-                sess.receive_next <= segStart && segStart < sess.receive_next + u32(sess.receive_window) || // TODO(mod)
-                sess.receive_next <= segEnd && segEnd < sess.receive_next + u32(sess.receive_window)) // TODO(mod)
+                sess.rcv_nxt <= segStart && segStart < sess.rcv_nxt + u32(sess.rcv_wnd) || // TODO(mod)
+                sess.rcv_nxt <= segEnd && segEnd < sess.rcv_nxt + u32(sess.rcv_wnd)) // TODO(mod)
             unacceptable_case = 4
         } else {
             fmt.println("ERROR! You messed up a case when checking for acceptable packets!")
             trap()
         }
 
-        is_ack := p.tcp.control_flags&TCP_ACK != 0
-        is_rst := p.tcp.control_flags&TCP_RST != 0
+        is_ack := p.tcp.control&TCP_ACK != 0
+        is_rst := p.tcp.control&TCP_RST != 0
         if !acceptable && !is_ack && !is_rst {
             node_log(n, fmt.aprintf("Unacceptable segment (case %d).", unacceptable_case))
             node_log_tcp_packet(n, p)
             node_log_tcp_state(n, sess)
             running = false
 
-            if p.tcp.control_flags&TCP_RST != 0 {
+            if p.tcp.control&TCP_RST != 0 {
                 return
             }
 
@@ -297,9 +297,9 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                 protocol = PacketProtocol.TCP,
                 tcp = PacketTcp{
                     // This is a bog-standard ACK of our current state.
-                    sequence_number = sess.send_next,
-                    ack_number = sess.receive_next,
-                    control_flags = TCP_ACK,
+                    seq = sess.snd_nxt,
+                    ack = sess.rcv_nxt,
+                    control = TCP_ACK,
                 },
                 color = &COLOR_ACK,
             })
@@ -322,7 +322,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // Not doing the security check they mention for a reset attack.
 
         // Handle a RST.
-        if p.tcp.control_flags&TCP_RST != 0 {
+        if p.tcp.control&TCP_RST != 0 {
             // There is some nuance in the spec about how to handle the various
             // types of connection closes and resets. We don't care.
             node_log(n, "Got a RST while established; closing connection.")
@@ -333,7 +333,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // Again, no security checks.
 
         // Handle a SYN.
-        if p.tcp.control_flags&TCP_SYN != 0 {
+        if p.tcp.control&TCP_SYN != 0 {
             if sess.state == TcpState.SynReceived {
                 // We're still handshaking, already received a SYN, and now we
                 // got another SYN. Just bail.
@@ -351,9 +351,9 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     protocol = PacketProtocol.TCP,
                     tcp = PacketTcp{
                         // This is a bog-standard ACK of our current state.
-                        sequence_number = sess.send_next,
-                        ack_number = sess.receive_next,
-                        control_flags = TCP_ACK,
+                        seq = sess.snd_nxt,
+                        ack = sess.rcv_nxt,
+                        control = TCP_ACK,
                     },
                     color = &COLOR_ACK,
                 })
@@ -362,7 +362,7 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         }
 
         // Ensure that any packets we process at this point have an ACK.
-        if p.tcp.control_flags&TCP_ACK == 0 {
+        if p.tcp.control&TCP_ACK == 0 {
             return
         }
         // From here on out, we know we have ACK data.
@@ -370,12 +370,12 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // Ignoring the RFC 5691 blind data injection attack for now.
 
         if sess.state == TcpState.SynReceived {
-            if sess.send_unacknowledged < p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
+            if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
                 node_log(n, fmt.aprintf("Good ACK. Updating window and moving from %v to ESTABLISHED.", sess.state))
                 sess.state = TcpState.Established
-                sess.send_window = p.tcp.window
-                sess.last_window_update_seq_num = p.tcp.sequence_number
-                sess.last_window_update_ack_num = p.tcp.ack_number
+                sess.snd_wnd = p.tcp.wnd
+                sess.snd_wl1 = p.tcp.seq
+                sess.snd_wl2 = p.tcp.ack
             } else {
                 // ACK outside the window while handshaking. Alas.
                 node_log(n, "Got an ACK outside our window while handshaking:")
@@ -384,8 +384,8 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     dst_ip = p.src_ip,
                     protocol = PacketProtocol.TCP,
                     tcp = PacketTcp{
-                        sequence_number = p.tcp.ack_number,
-                        control_flags = TCP_RST,
+                        seq = p.tcp.ack,
+                        control = TCP_RST,
                     },
                     color = &COLOR_RST,
                 })
@@ -397,22 +397,22 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
         // other various states. If this returns false, abort processing.
         process_established :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> bool {
             // Update send window based on ACK from other side.
-            if sess.send_unacknowledged <= p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
-                window_moved_forward := sess.last_window_update_seq_num < p.tcp.sequence_number // TODO(mod)
-                ack_moved_forward := sess.last_window_update_seq_num == p.tcp.sequence_number && sess.last_window_update_ack_num <= p.tcp.ack_number // TODO(mod)
+            if sess.snd_una <= p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
+                window_moved_forward := sess.snd_wl1 < p.tcp.seq // TODO(mod)
+                ack_moved_forward := sess.snd_wl1 == p.tcp.seq && sess.snd_wl2 <= p.tcp.ack // TODO(mod)
                 if window_moved_forward || ack_moved_forward {
-                    sess.send_window = p.tcp.window
-                    sess.last_window_update_seq_num = p.tcp.sequence_number
-                    sess.last_window_update_ack_num = p.tcp.ack_number
+                    sess.snd_wnd = p.tcp.wnd
+                    sess.snd_wl1 = p.tcp.seq
+                    sess.snd_wl2 = p.tcp.ack
                 }
             }
 
-            if p.tcp.ack_number <= sess.send_unacknowledged { // TODO(mod)
+            if p.tcp.ack <= sess.snd_una { // TODO(mod)
                 // This ACK is a duplicate and can be ignored.
                 node_log(n, "Duplicate ACK. No worries.")
-            } else if sess.send_unacknowledged < p.tcp.ack_number && p.tcp.ack_number <= sess.send_next { // TODO(mod)
+            } else if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
                 node_log(n, "Advancing send window.")
-                sess.send_unacknowledged = p.tcp.ack_number
+                sess.snd_una = p.tcp.ack
                 // TODO: Clear acknowledged segments from the retransmission queue.
             } else {
                 // ACK for something not yet sent. Ignore, and ACK back at them
@@ -423,9 +423,9 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
                     dst_ip = p.src_ip,
                     protocol = PacketProtocol.TCP,
                     tcp = PacketTcp{
-                        sequence_number = sess.send_next,
-                        ack_number = sess.receive_next,
-                        control_flags = TCP_ACK,
+                        seq = sess.snd_nxt,
+                        ack = sess.rcv_nxt,
+                        control = TCP_ACK,
                     },
                     color = &COLOR_ACK,
                 })
@@ -443,16 +443,16 @@ handle_tcp_packet :: proc(n: ^Node, p: Packet) {
 
         // Process the segment's data
         node_log(n, fmt.aprintf("Received: %s", p.data))
-        sess.receive_next += u32(len(p.data))
+        sess.rcv_nxt += u32(len(p.data))
         if len(p.data) > 0 {
             send_packet(n, Packet{
                 dst_ip = p.src_ip,
                 protocol = PacketProtocol.TCP,
                 tcp = PacketTcp{
-                    sequence_number = sess.send_next,
-                    ack_number = sess.receive_next,
-                    control_flags = TCP_ACK,
-                    window = sess.receive_window,
+                    seq = sess.snd_nxt,
+                    ack = sess.rcv_nxt,
+                    control = TCP_ACK,
+                    wnd = sess.rcv_wnd,
                 },
                 color = &COLOR_ACK,
             })
@@ -512,8 +512,8 @@ close_tcp_session :: proc(n: ^Node, sess_idx: int) {
 }
 
 node_log_tcp_packet :: proc(n: ^Node, p: Packet) {
-    node_log(n, fmt.aprintf("  SEG: SEQ=%v, ACK=%v, LEN=%v, WND=%v", p.tcp.sequence_number, p.tcp.ack_number, len(p.data), p.tcp.window))
-    node_log(n, fmt.aprintf("  Control: %v", control_flag_str(p.tcp.control_flags)))
+    node_log(n, fmt.aprintf("  SEG: SEQ=%v, ACK=%v, LEN=%v, WND=%v", p.tcp.seq, p.tcp.ack, len(p.data), p.tcp.wnd))
+    node_log(n, fmt.aprintf("  Control: %v", control_flag_str(p.tcp.control)))
     if len(p.data) > 0 {
         node_log(n, fmt.aprintf("  Data: %s", p.data))
     }
@@ -521,11 +521,11 @@ node_log_tcp_packet :: proc(n: ^Node, p: Packet) {
 
 node_log_tcp_state :: proc(n: ^Node, sess: ^TcpSession) {
     node_log(n, fmt.aprintf("  State: %v", sess.state))
-    node_log(n, fmt.aprintf("  SND.UNA: %v", sess.send_unacknowledged))
-    node_log(n, fmt.aprintf("  SND.NXT: %v", sess.send_next))
-    node_log(n, fmt.aprintf("  SND.WND: %v", sess.send_window))
-    node_log(n, fmt.aprintf("  ISS: %v", sess.initial_send_seq_num))
-    node_log(n, fmt.aprintf("  RCV.NXT: %v", sess.receive_next))
-    node_log(n, fmt.aprintf("  RCV.WND: %v", sess.receive_window))
-    node_log(n, fmt.aprintf("  IRS: %v", sess.initial_receive_seq_num))
+    node_log(n, fmt.aprintf("  SND.UNA: %v", sess.snd_una))
+    node_log(n, fmt.aprintf("  SND.NXT: %v", sess.snd_nxt))
+    node_log(n, fmt.aprintf("  SND.WND: %v", sess.snd_wnd))
+    node_log(n, fmt.aprintf("  ISS: %v", sess.iss))
+    node_log(n, fmt.aprintf("  RCV.NXT: %v", sess.rcv_nxt))
+    node_log(n, fmt.aprintf("  RCV.WND: %v", sess.rcv_wnd))
+    node_log(n, fmt.aprintf("  IRS: %v", sess.irs))
 }

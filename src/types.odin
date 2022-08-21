@@ -113,10 +113,10 @@ PacketProtocol :: enum {
 }
 
 PacketTcp :: struct  {
-	sequence_number: u32,
-	ack_number: u32,
-	control_flags: u16,
-	window: u16,
+	seq: u32, // SEG.SEQ, the sequence number of the segment
+	ack: u32, // SEG.ACK, the sequence number being acknowledged by this segment
+	control: TcpControlFlags, // The TCP control bits (SYN, ACK, FIN, etc.)
+	wnd: u16, // SEG.WND, the way the receiver communicates the desired size of the send window
 }
 
 PacketAnimation :: enum {
@@ -126,14 +126,16 @@ PacketAnimation :: enum {
 	Dropped,
 }
 
-TCP_CWR :: 0b10000000
-TCP_ECE :: 0b01000000
-TCP_URG :: 0b00100000
-TCP_ACK :: 0b00010000
-TCP_PSH :: 0b00001000
-TCP_RST :: 0b00000100
-TCP_SYN :: 0b00000010
-TCP_FIN :: 0b00000001
+TcpControlFlags :: distinct u16
+
+TCP_CWR: TcpControlFlags : 0b10000000
+TCP_ECE: TcpControlFlags : 0b01000000
+TCP_URG: TcpControlFlags : 0b00100000
+TCP_ACK: TcpControlFlags : 0b00010000
+TCP_PSH: TcpControlFlags : 0b00001000
+TCP_RST: TcpControlFlags : 0b00000100
+TCP_SYN: TcpControlFlags : 0b00000010
+TCP_FIN: TcpControlFlags : 0b00000001
 
 TcpSession :: struct {
 	ip: u32, // we aren't simulating ports, so this uniquely identifies a connection for now...
@@ -141,18 +143,18 @@ TcpSession :: struct {
 	state: TcpState,
 
     // "you just have to track where you're at" -cloin
-    send_unacknowledged: u32, // SND.UNA
-    send_next: u32,	// SND.NXT
-    send_window: u16, // SND.WND
+    snd_una: u32, // SND.UNA, the sequence number of the earliest unacknowledged segment
+    snd_nxt: u32, // SND.NXT, the sequence number of the next segment to be sent
+    snd_wnd: u16, // SND.WND, the size of the send window (SND.UNA + SND.WND = the send window)
 	// no urgent pointers
-	last_window_update_seq_num: u32, // SND.WL1
-	last_window_update_ack_num: u32, // SND.WL2
-	initial_send_seq_num: u32, // ISS
+	snd_wl1: u32, // SND.WL1, the sequence number of the segment that last updated our send window
+	snd_wl2: u32, // SND.WL2, the ACK value of the segment that last updated our send window
+	iss: u32, // ISS, the Initial Send Sequence number, or the starting point for all our sent segments
 
-	receive_next: u32, // RCV.NXT
-	receive_window: u16, // RCV.WND
+	rcv_nxt: u32, // RCV.NXT, the sequence number of the next segment we expect to receive
+	rcv_wnd: u16, // RCV.WND, the size of the receive window (RCV.NXT + RCV.WND = the receive window)
 	// no urgent pointers
-	initial_receive_seq_num: u32, // IRS
+	irs: u32, // IRS, the Initial Receive Sequence Number, or the first sequence number we ACKed
 }
 
 TcpState :: enum {
@@ -225,7 +227,7 @@ node_log :: proc(n: ^Node, msg: string) {
 	queue.push_back(&n.logs, LogEntry{tick_count, msg})
 }
 
-control_flag_str :: proc(f: u16) -> string {
+control_flag_str :: proc(f: TcpControlFlags) -> string {
 	if f&TCP_SYN != 0 && f&TCP_ACK != 0 {
 		return "SYNACK"
 	} else if f&TCP_RST != 0 && f&TCP_ACK != 0 {

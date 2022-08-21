@@ -365,16 +365,16 @@ tick :: proc() {
 				dst_ip = dst_ip,
 				protocol = PacketProtocol.TCP,
 				tcp = PacketTcp{
-					sequence_number = iss,
-					control_flags = TCP_SYN,
+					seq = iss,
+					control = TCP_SYN,
 				},
 				color = &COLOR_SYN,
 			}
 			send_packet(nodes_by_name["me"], hello_discord)
 
-			sess.initial_send_seq_num = iss
-			sess.send_unacknowledged = iss
-			sess.send_next = iss + 1
+			sess.iss = iss
+			sess.snd_una = iss
+			sess.snd_nxt = iss + 1
 
 			sess.state = TcpState.SynSent
 		} else {
@@ -387,15 +387,15 @@ tick :: proc() {
 					data = "Hello!",
 					protocol = PacketProtocol.TCP,
 					tcp = PacketTcp{
-						// sequence_number = ???
-						ack_number = sess.receive_next,
-						control_flags = TCP_ACK,
-						window = 10, // excellent choice of window
+						// seq = ???
+						ack = sess.rcv_nxt,
+						control = TCP_ACK,
+						wnd = 10, // excellent choice of window
 					},
 					color = &text_color,
 				}
 				send_packet(nodes_by_name["me"], p)
-				sess.send_next += u32(len(p.data))
+				sess.snd_nxt += u32(len(p.data))
 			}
 		}
 	}
@@ -677,9 +677,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			for sess in inspect_node.tcp_sessions {
 				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.send_next, sess.send_window, sess.send_unacknowledged), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.receive_next, sess.receive_window), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.initial_send_seq_num, sess.initial_receive_seq_num), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.snd_nxt, sess.snd_wnd, sess.snd_una), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.rcv_nxt, sess.rcv_wnd), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.iss, sess.irs), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 			}
 
 			next_line(&y)
