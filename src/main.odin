@@ -657,7 +657,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			next_line(&y)
 
-			log_lines := 48
+			log_lines := 45
 			outline_width : f32 = 2
 			draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 			draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
@@ -668,6 +668,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			if queue.len(inspect_node.logs) > log_lines {
 				draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+			} else {
+				next_line(&y)
 			}
 
 			iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
