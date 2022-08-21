@@ -22,7 +22,10 @@ exiting_packets : [dynamic]Packet
 
 nodes_by_name : map[string]^Node
 
-t          : f32
+t           : f32
+last_tick_t : f32
+tick_count  : int
+
 min_width  : f32
 min_height : f32
 max_width  : f32
@@ -43,7 +46,7 @@ default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,san
 monospace_font := `monospace`
 icon_font      := `FontAwesome`
 
-scale        : f32 = 1
+scale          : f32
 last_mouse_pos := Vec2{}
 mouse_pos      := Vec2{}
 clicked_pos    := Vec2{}
@@ -68,8 +71,6 @@ log_size       : int = 50
 text_height: f32 = 16
 line_gap   : f32 = 3
 
-tick_count := 0
-last_tick_t := t
 running := false
 
 TICK_INTERVAL_BASE :: 0.7
@@ -144,6 +145,9 @@ init_state :: proc() {
 	}
 
 	t = 0
+	last_tick_t = t
+	tick_count = 0
+
 	scale = 1
 	min_width  = 10000
 	min_height = 10000
@@ -181,7 +185,6 @@ init_state :: proc() {
 	pan = Vec2{pad_size, pad_size + toolbar_height}
 	
 	node_selected = -1
-	tick_count = 0
 }
 
 main :: proc() {
@@ -742,6 +745,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if button(rect(edge_pad + button_width + button_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf0e2", icon_font) {
 		reset_everything()
 		running = false
+		return true
 	}
 	if !running {
 		if button(rect(edge_pad + ((button_width + button_pad) * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
