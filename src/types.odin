@@ -46,7 +46,7 @@ Node :: struct {
 
 	name: string,
 	interfaces: []Interface,
-	routing_rules: []RoutingRule,
+	routing_rules: [dynamic]RoutingRule,
 	packets_per_tick: int,
 	max_buffer_size: int,
 
@@ -217,7 +217,7 @@ make_node :: proc(
 	pos: Vec2,
 	name: string,
 	interfaces: []Interface,
-	routing_rules: []RoutingRule,
+	routing_rules: [dynamic]RoutingRule,
 	packets_per_tick: int,
 	max_buffer_size: int,
 ) -> Node {

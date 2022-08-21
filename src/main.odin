@@ -9,6 +9,7 @@ import "core:mem"
 import "core:runtime"
 import "core:slice"
 import "core:strings"
+import "core:strconv"
 import "vendor:wasm/js"
 
 global_arena := Arena{}
@@ -585,7 +586,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
 	if node_selected != -1 {
-		inspect_node := nodes[node_selected]
+		inspect_node := &nodes[node_selected]
 
 		y: f32 = 0
 		next_line := proc(y: ^f32) -> f32 {
@@ -644,29 +645,74 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			draw_text("Routing Rules:", Vec2{rule_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 
 			ip_str_chunk := "255.255.255.255"
-			max_width : f32 = 0
-			for rule in inspect_node.routing_rules {
-				line := fmt.tprintf("IP: %*s,   Subnet: %*s, NIC: %d", len(ip_str_chunk), ip_to_str(rule.ip), len(ip_str_chunk), ip_to_str(rule.subnet_mask), rule.interface_id + 1)
-				width := measure_text(line, 1, monospace_font)
-				max_width = max(max_width, width)
-				draw_text(line, Vec2{rule_left, next_line(&y)}, 1, monospace_font, text_color2)
+			ip_head_str := "IP:"
+			subnet_head_str := "Subnet:"
+			nic_head_str := "NIC:"
+
+			ip_head_width     := measure_text(ip_head_str, 1, monospace_font)
+			subnet_head_width := measure_text(subnet_head_str, 1, monospace_font)
+			nic_head_width    := measure_text(nic_head_str, 1, monospace_font)
+			field_width := measure_text(ip_str_chunk, 1, monospace_font) + 10
+			text_height = get_text_height(1, monospace_font)
+			box_height := (text_height * 2)
+
+			for rule, idx in inspect_node.routing_rules {
+				next_line(&y)
+				ip_chunk := fmt.tprintf("%s %s", ip_head_str, ip_to_str(rule.ip))
+				ip_width := measure_text(ip_chunk, 1, monospace_font)
+
+				subnet_chunk := fmt.tprintf("%s %s", subnet_head_str, ip_to_str(rule.subnet_mask))
+				subnet_width := measure_text(subnet_chunk, 1, monospace_font)
+
+				nic_chunk := fmt.tprintf("%s %d", nic_head_str, rule.interface_id + 1)
+				nic_width := measure_text(nic_chunk, 1, monospace_font)
+
+				offset : f32 = 0
+				draw_text(ip_chunk, Vec2{rule_left + offset, y}, 1, monospace_font, text_color2); offset += ip_head_width + field_width + 13
+				draw_text(subnet_chunk, Vec2{rule_left + offset, y}, 1, monospace_font, text_color2); offset += subnet_head_width + field_width + 13
+				draw_text(nic_chunk, Vec2{rule_left + offset, y}, 1, monospace_font, text_color2); offset += nic_head_width + field_width + 13
+
+				// Delete rule
+				if button(rect(rule_left + offset, y, box_height, box_height), "\uf1f8", icon_font) {
+					ordered_remove(&inspect_node.routing_rules, idx)
+				}
 			}
 
 			next_line(&y)
+			y += 8
 
-			field_width := measure_text(ip_str_chunk, 1, monospace_font) + 9
+			field_offset : f32 = 0
+			draw_text(ip_head_str, Vec2{rule_left + field_offset, y + (box_height / 2) - (text_height / 2)}, 1, monospace_font, text_color); field_offset += ip_head_width + 5
+			draw_input(rect(rule_left + field_offset, y, field_width, box_height), 0); field_offset += field_width + 8
 
-			box_height := (text_height * 3)
-			draw_input(rect(rule_left, y, field_width, box_height), 0)
-			draw_input(rect(rule_left + field_width + 5, y, field_width, box_height), 1)
-			draw_input(rect(rule_left + ((field_width + 5) * 2), y, field_width, box_height), 2)
-			if button(rect(rule_left + ((field_width + 5) * 3), y, box_height, box_height), "+", monospace_font) {
-				fmt.printf("Toast!\n")
+			draw_text(subnet_head_str, Vec2{rule_left + field_offset, y + (box_height / 2) - (text_height / 2)}, 1, monospace_font, text_color); field_offset += subnet_head_width + 5
+			draw_input(rect(rule_left + field_offset, y, field_width, box_height), 1); field_offset += field_width + 8
+
+			draw_text(nic_head_str, Vec2{rule_left + field_offset, y + (box_height / 2) - (text_height / 2)}, 1, monospace_font, text_color); field_offset += nic_head_width + 5
+			draw_input(rect(rule_left + field_offset, y, field_width, box_height), 2); field_offset += field_width + 8
+
+			// Add rule
+			ip_str := strings.string_from_ptr(slice.as_ptr(inputs[0].buffer[:]), inputs[0].cursor)
+			ip, ok := str_to_ip(ip_str)
+
+			subnet_str := strings.string_from_ptr(slice.as_ptr(inputs[1].buffer[:]), inputs[1].cursor)
+			subnet, ok2 := str_to_ip(subnet_str)
+
+			interface := strings.string_from_ptr(slice.as_ptr(inputs[2].buffer[:]), inputs[2].cursor)
+			val, ok3 := strconv.parse_int(interface)
+
+			if ok && ok2 && ok3 {
+				if button(rect(rule_left + field_offset, y, box_height, box_height), "+", monospace_font) {
+					clear_input(0)
+					clear_input(1)
+					clear_input(2)
+					append(&inspect_node.routing_rules, RoutingRule{ip = ip, subnet_mask = subnet, interface_id = val})
+				}
 			}
 		}
 
 		// render logs and debug info
-		logs_left: f32 = menu_offset + 500
+		logs_left: f32 = menu_offset + 600
 		logs_height: f32 = 1000
 		logs_width: f32 = 600
 
@@ -857,6 +903,7 @@ draw_input :: proc(r: Rect, infield_idx: int) {
 
 	text := strings.string_from_ptr(slice.as_ptr(infield.buffer[:]), infield.cursor)
 	text_width := measure_text(text, 1, monospace_font)
+	text_height = get_text_height(1, monospace_font)
 	draw_text(text, Vec2{r.pos.x + 4, r.pos.y + ((text_height + 5) / 2)}, 1, monospace_font, text_color2)
 
 	if infield.has_focus {
@@ -866,6 +913,12 @@ draw_input :: proc(r: Rect, infield_idx: int) {
 		}
 		draw_line(Vec2{r.pos.x + 4 + text_width + 2, r.pos.y}, Vec2{r.pos.x + 4 + text_width + 2, r.pos.y + r.size.y}, 1, text_color, infield.alpha)
 	}
+}
+clear_input :: proc(infield_idx: int) {
+	infield := &inputs[infield_idx]
+	infield.has_focus = false
+	mem.zero_slice(infield.buffer[:])
+	infield.cursor = 0
 }
 
 draw_graph :: proc(header: string, history: ^queue.Queue(u32), x, y, size: f32) {
@@ -950,7 +1003,7 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 button :: proc(rect: Rect, text: string, font: string) -> bool {
 	draw_rect(rect, 3, button_color)
 	text_width := measure_text(text, 1, font)
-	text_height := get_text_height(1, font)
+	text_height = get_text_height(1, font)
 	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(text_height / 2)}, 1, font, text_color)
 
 	if pt_in_rect(mouse_pos, rect) {

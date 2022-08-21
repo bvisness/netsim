@@ -241,7 +241,7 @@
 					get_text_height: (size, f, flen) => {
 						const font = window.wasm.odinMem.loadString(f, flen);
 						updateFont(size, font);
-						return ctx.measureText('NothinBelowTheBaseline').actualBoundingBoxDescent / dpr;
+						return cached_height;
 					}
 				},
 			});

@@ -60,7 +60,7 @@ load_config :: proc(config: string, nodes: ^[dynamic]Node, conns: ^[dynamic]Conn
 			max_buffer_size = 15
 		}
 
-		append(nodes, make_node(pos, name, interfaces[:], rules[:], int(packets_per_tick), int(max_buffer_size)))
+		append(nodes, make_node(pos, name, interfaces[:], rules, int(packets_per_tick), int(max_buffer_size)))
 	}
 
 	// parse connections
