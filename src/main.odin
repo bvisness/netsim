@@ -42,6 +42,7 @@ line_color    := Vec3{}
 outline_color := Vec3{}
 graph_color   := Vec3{}
 node_color    := Vec3{}
+node_color2   := Vec3{}
 toolbar_color := Vec3{}
 
 default_font   := `-apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol`
@@ -111,9 +112,10 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		text_color    = Vec3{255, 255, 255}
 		text_color2   = Vec3{180, 180, 180}
 		button_color  = Vec3{40,   40,  40}
-		line_color    = Vec3{120, 120, 120}
+		line_color    = Vec3{100, 100, 100}
 		outline_color = Vec3{80,   80,  80}
-		node_color    = Vec3{180, 180, 180}
+		node_color    = Vec3{140, 140, 140}
+		node_color2   = Vec3{220, 220, 220}
 		graph_color   = Vec3{180, 180, 180}
 		toolbar_color = Vec3{120, 120, 120}
 	} else {
@@ -125,6 +127,7 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		line_color    = Vec3{219, 211, 205}
 		outline_color = Vec3{219, 211, 205}
 		node_color    = Vec3{129, 100,  80}
+		node_color2   = Vec3{189, 160, 140}
 		graph_color   = Vec3{69,   49,  34}
 		toolbar_color = Vec3{219, 211, 205}
 	}
@@ -507,7 +510,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 
     canvas_clear()
-    draw_rect(rect(0, 0, width, height), 0, bg_color)
+    draw_rect(rect(max_width + pad_size, 0, width, height), 0, bg_color)
     draw_rect(rect(0, toolbar_height, max_width + pad_size, height), 0, bg_color2)
 
 	// Render graph view
@@ -520,8 +523,13 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// render nodes
-	for node in &nodes {
-    	scaled_rect(node.pos.x, node.pos.y, node_size, node_size, 5, node_color.x, node_color.y, node_color.z, 255)
+	for node, idx in &nodes {
+		color := node_color
+		if idx == node_selected {
+			color = node_color2
+		}
+
+    	scaled_rect(node.pos.x, node.pos.y, node_size, node_size, 5, color.x, color.y, color.z, 255)
 
 		// Draw label
 		scaled_text(node.name, node.pos.x, node.pos.y - 16, default_font, text_color.x, text_color.y, text_color.z, 255)
