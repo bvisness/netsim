@@ -371,9 +371,9 @@ tick :: proc() {
 	// 	}
 	// }
 
-	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], GETTYSBURG)
-	send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
-	send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], MUCH_ADO)
+	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], MUCH_ADO)
+	// send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
+	// send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], GETTYSBURG)
 
 	// Update stat histories
 	for node in &nodes {
@@ -744,7 +744,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		// render logs and debug info
 		logs_left: f32 = menu_offset + 600
-		logs_height: f32 = 1000
+		logs_height: f32 = 900
 		logs_width: f32 = 600
 
 		y = pad_size + toolbar_height
@@ -763,8 +763,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					line_width := 64
 
 					draw_text("Received data:", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-					for i := 0; i < len(data); i += line_width {
-						draw_text(data[i:min(i+line_width, len(data))], Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					length_in_lines := int(math.ceil(f32(len(data))/f32(line_width)))
+					visible_data := data[max(0, (length_in_lines-4)*line_width):]
+					for i := 0; i < len(visible_data); i += line_width {
+						draw_text(visible_data[i:min(i+line_width, len(visible_data))], Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 					}
 				}
 			}
@@ -772,7 +774,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			next_line(&y)
 		}
 
-		log_lines := 65
+		log_lines := 40
 		outline_width : f32 = 2
 		draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 		draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)

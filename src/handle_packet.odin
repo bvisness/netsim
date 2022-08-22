@@ -11,7 +11,7 @@ RETRANSMIT_TIMEOUT :: 25 // ticks
 RETRANSMIT_JITTER :: 10 // more ticks
 SSTHRESH :: 8*SEG_SIZE // bytes
 GLOBAL_TIMEOUT :: 45 // ticks
-ack_delay := 5 // ticks
+ack_delay := 3 // ticks
 
 COLOR_RST    := Vec3{220, 80, 80}
 COLOR_SYN    := Vec3{80, 80, 220}

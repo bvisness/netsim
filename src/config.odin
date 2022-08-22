@@ -147,7 +147,7 @@ net_config := `
 				{ "ip": "5.5.100.3", "subnet": "255.255.255.255", "interface": 3 },
 				{ "ip": "0.0.0.0",   "subnet": "0.0.0.0",         "interface": 0 },
 			],
-			"packets_per_tick": 1
+			"packets_per_tick": 2
 		},
 		{
 			"name": "discord_1",
