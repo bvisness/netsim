@@ -194,6 +194,7 @@ TcpSession :: struct {
 	snd_buffer: [dynamic]Packet,
 	rcv_buffer: [dynamic]Packet,
 	retransmit: [dynamic]TcpSend,
+	retransmit_timeout: int, // in ticks
 	retransmit_history: queue.Queue(u32),
 
 	first_ack_timestamp: int, // Tick count of the first ACK in this batch
@@ -220,7 +221,6 @@ TcpSend :: struct {
 	data: string,
 	seq: u32, // Sequence number of the start of this segment
 	sent_at: int, // Tick number when this packet was originally transmitted.
-	retry_after: int, // Retransmit after this many ticks have elapsed.
 	retries: int,
 }
 

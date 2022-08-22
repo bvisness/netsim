@@ -9,7 +9,7 @@ import "core:strings"
 SEG_SIZE :: 10
 RETRANSMIT_TIMEOUT :: 25 // ticks
 RETRANSMIT_JITTER :: 10 // more ticks
-SSTHRESH :: 4*SEG_SIZE // bytes
+SSTHRESH :: 8*SEG_SIZE // bytes
 GLOBAL_TIMEOUT :: 45 // ticks
 ack_delay := 5 // ticks
 
@@ -339,6 +339,7 @@ process_received_tcp_packet :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> b
 
     // Only process this packet if it's the next one we expect.
     if p.tcp.seq != sess.rcv_nxt {
+        batch_ack(sess) // Out-of-order packets mean we missed a packet, and need to tell the sender immediately!
         return false
     }
 
@@ -433,7 +434,8 @@ process_received_tcp_packet :: proc(n: ^Node, sess: ^TcpSession, p: Packet) -> b
 
         if p.tcp.ack <= sess.snd_una { // TODO(mod)
             // This ACK is a duplicate and can be ignored.
-            node_log(n, "Duplicate ACK. No worries.")
+            node_log(n, "Duplicate ACK.")
+            tcp_track_ack(n, sess, p.tcp.ack)
         } else if sess.snd_una < p.tcp.ack && p.tcp.ack <= sess.snd_nxt { // TODO(mod)
             node_log(n, "Advancing send window.")
             tcp_track_ack(n, sess, p.tcp.ack)
@@ -538,40 +540,47 @@ tcp_tick :: proc(n: ^Node) {
             // HACK HACK HACK
             global_timeout := tick_count - sess.last_ack_timestamp > GLOBAL_TIMEOUT
             if global_timeout {
-                sess.cwnd = 1*SEG_SIZE // slow-start back up from 1
+                new_cwnd: u32 = 1*SEG_SIZE // slow-start back up from 1
+                if sess.cwnd_sent > new_cwnd {
+                    node_log(n, "Hit global timeout. Reverting CWND to the minimum.")
+                }
+                sess.cwnd = new_cwnd
                 sess.cwnd_sent = 0
                 sess.cwnd_acked = 0
-                node_log(n, "Hit global timeout. Reverting CWND to the minimum.")
             }
 
             cwnd_available := sess.cwnd_sent < sess.cwnd
             if !congestion_control_on || cwnd_available {
                 // Send the packet at the front of our send queue (or our retransmission queue...)
                 should_send: bool
-                is_retransmit: bool
                 to_send: Packet
+
+                should_retransmit: bool
                 for s, i in &sess.retransmit {
-                    if tick_count - s.sent_at > s.retry_after {
-                        node_log(n, fmt.aprintf("Retransmitting packet \"%s\" (SEG.SEQ=%d)", s.data, s.seq))
-                        should_send = true
-                        is_retransmit = true
-                        to_send = tcp_data_packet(&sess, s)
-
-                        // Retransmissions indicate congestion. Cut our
-                        // congestion window to half the data in flight.
-                        if s.retries == 0 {
-                            sess.cwnd = max(sess.cwnd_sent/2, 2*SEG_SIZE)
-                            sess.cwnd_sent = 0 // HACK??
-                            node_log(n, fmt.aprintf("A packet was dropped! Cutting congestion window to %d", sess.cwnd))
-                        }
-
-                        s.sent_at = tick_count
-                        s.retry_after *= 2
-                        s.retries += 1
-
+                    if tick_count - s.sent_at > sess.retransmit_timeout {
+                        should_retransmit = true
                         break
                     }
                 }
+                if should_retransmit {
+                    should_send = true
+                    s := &sess.retransmit[0]
+                    to_send = tcp_data_packet(&sess, s^)
+                    node_log(n, fmt.aprintf("Retransmitting packet \"%s\" (SEG.SEQ=%d, sent at %d)", s.data, s.seq, s.sent_at))
+
+                    // Retransmissions indicate congestion. Cut our
+                    // congestion window to half the data in flight.
+                    if s.retries == 0 {
+                        sess.cwnd = max(sess.cwnd_sent/2, 2*SEG_SIZE)
+                        sess.cwnd_sent = 0 // HACK??
+                        node_log(n, fmt.aprintf("Cutting congestion window to %d", sess.cwnd))
+                    }
+
+                    s.sent_at = tick_count
+                    s.retries += 1
+                    sess.retransmit_timeout *= 2
+                }
+
                 if !should_send && len(sess.snd_buffer) > 0 {
                     should_send = true
                     to_send = sess.snd_buffer[0]
@@ -581,13 +590,12 @@ tcp_tick :: proc(n: ^Node) {
                 if should_send {
                     send_packet(n, to_send)
 
-                    if !is_retransmit {
+                    if !should_retransmit {
                         // Add the sent packet's data to the retransmission queue
                         append(&sess.retransmit, TcpSend{
                             data = to_send.data,
                             seq = to_send.tcp.seq,
                             sent_at = tick_count,
-                            retry_after = RETRANSMIT_TIMEOUT + int(rand.int31() % RETRANSMIT_JITTER),
                         })
                     }
 
@@ -704,6 +712,7 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
         ip = ip,
         rcv_wnd = 200, // TODO(ben): This is arbitrary for now!
         cwnd = 2*SEG_SIZE, // Start small so we can see slow start.
+        retransmit_timeout = new_retransmit_timeout(),
         received_data = strings.builder_make(),
     })
 	return len(n.tcp_sessions) - 1, true
@@ -733,6 +742,7 @@ tcp_track_ack :: proc(n: ^Node, sess: ^TcpSession, ack: u32) {
     // Goofy-looking double for, but it makes for nicer logs and less index confusion on my part.
     // I don't care that it's quadratic. It doesn't matter.
     num_packets_acked := 0
+    startover:
     for {
         for s, i in sess.retransmit {
             s := sess.retransmit[i]
@@ -740,11 +750,12 @@ tcp_track_ack :: proc(n: ^Node, sess: ^TcpSession, ack: u32) {
                 node_log(n, fmt.aprintf("Clearing retransmission of \"%s\"", s.data))
                 ordered_remove(&sess.retransmit, i)
                 num_packets_acked += 1
-                continue
+                continue startover
             }
         }
         break
     }
+    sess.retransmit_timeout = new_retransmit_timeout()
 
     should_increase_cwnd := false
     if sess.cwnd < SSTHRESH {
@@ -772,6 +783,24 @@ batch_ack :: proc(sess: ^TcpSession) {
         sess.eventual_ack = 0
     }
     sess.eventual_ack = max(sess.eventual_ack, sess.rcv_nxt)
+}
+
+ack_now :: proc(n: ^Node, sess: ^TcpSession) {
+    send_packet(n, Packet{
+        dst_ip = sess.ip,
+        protocol = PacketProtocol.TCP,
+        tcp = PacketTcp{
+            seq = sess.snd_nxt,
+            ack = sess.eventual_ack,
+            control = TCP_ACK,
+            wnd = sess.rcv_wnd,
+        },
+        color = &COLOR_ACK,
+    })
+}
+
+new_retransmit_timeout :: proc() -> int {
+    return RETRANSMIT_TIMEOUT + int(rand.int31() % RETRANSMIT_JITTER)
 }
 
 node_log_packet :: proc(n: ^Node, p: Packet) {
