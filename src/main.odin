@@ -192,7 +192,6 @@ init_state :: proc() {
 	}
 	max_width += node_size + pad_size
 	max_height += node_size + pad_size
-	pan = Vec2{pad_size, pad_size + toolbar_height}
 
 	append(&inputs, make_input_field(15))
 	append(&inputs, make_input_field(15))
@@ -452,6 +451,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 		rand.set_global_seed(random_seed)
 		get_session_storage("muted")
+
+		pan = Vec2{pad_size, (max_height / 2) + pad_size}
 		first_frame = false
 	}
 
