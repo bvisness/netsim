@@ -79,7 +79,7 @@ text_height    : f32 = 0
 line_gap       : f32 = 0
 graph_cols     :: 3
 graph_size     :: 150
-graph_gap      : f32 = 0
+graph_gap      :: 40
 
 
 TICK_INTERVAL_BASE :: 0.7
@@ -365,15 +365,15 @@ tick :: proc() {
 	// And extra fun stuff we do on each tick for testing:
 
 	// Generate random packets, huzzah
-	// if tick_count % 3 == 0 {
-	// 	for i := 0; i < 10; i += 1 {
-	// 		generate_random_packet()
-	// 	}
-	// }
+	if tick_count % 2 == 0 {
+		for i := 0; i < 2; i += 1 {
+			generate_random_packet()
+		}
+	}
 
 	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], MUCH_ADO)
-	// send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
-	// send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], GETTYSBURG)
+	send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
+	send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], GETTYSBURG)
 
 	// Update stat histories
 	for node in &nodes {
@@ -466,8 +466,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     t += dt
 
-	graph_gap = (text_height + line_gap) * 2
-
 	// compute graph scale
 	if pt_in_rect(mouse_pos, rect(0, toolbar_height, max_width, height)) {
 		scale *= 1 + (0.05 * scroll_velocity * dt)
@@ -479,15 +477,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	}
 
 	// compute pan
-	pan_velocity := Vec2{}
+	pan_delta := Vec2{}
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, rect(0, toolbar_height, max_width, height)) {
-			pan_velocity.x = mouse_pos.x - last_mouse_pos.x
-			pan_velocity.y = mouse_pos.y - last_mouse_pos.y
+			pan_delta.x = mouse_pos.x - last_mouse_pos.x
+			pan_delta.y = mouse_pos.y - last_mouse_pos.y
 		}
 		last_mouse_pos = mouse_pos
 	}
-	pan += 3 * pan_velocity
+	pan += pan_delta
 
 	// check intersections
 	for node, idx in &nodes {
@@ -648,10 +646,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				return res
 			}
 
-			draw_graph("Avg. Packets Sent Over Time", &inspect_node.avg_sent_history, graph_pos + next_graph_offset(&gi, &y))
-			draw_graph("Avg. Packets Received Over Time", &inspect_node.avg_recv_history, graph_pos + next_graph_offset(&gi, &y))
-			draw_graph("Avg. Packets Dropped Over Time", &inspect_node.avg_drop_history, graph_pos + next_graph_offset(&gi, &y))
-			draw_graph("Avg. Packet Ticks Over Time", &inspect_node.avg_tick_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Packets Sent Over Time", &inspect_node.avg_sent_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Packets Received Over Time", &inspect_node.avg_recv_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Packets Dropped Over Time", &inspect_node.avg_drop_history, graph_pos + next_graph_offset(&gi, &y))
+			draw_graph("Packet Ticks Over Time", &inspect_node.avg_tick_history, graph_pos + next_graph_offset(&gi, &y))
 			for sess, i in &inspect_node.tcp_sessions {
 				if congestion_control_on {
 					draw_graph(fmt.tprintf("Session %d Congestion Window", i+1), &sess.cwnd_history, graph_pos + next_graph_offset(&gi, &y))
@@ -898,8 +896,7 @@ generate_random_packet :: proc() {
 	send_packet(&nodes[src_id], Packet{
 		src_ip = nodes[src_id].interfaces[0].ip,
 		dst_ip = nodes[dst_id].interfaces[0].ip,
-		color = &text_color,
-		//color = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
+		color_for_real = Vec3{f32(rand_int(80, 230)), f32(rand_int(80, 230)), f32(rand_int(80, 230))},
 	})
 }
 
@@ -924,7 +921,8 @@ draw_packet_in_transit :: proc(packet: ^Packet) {
 		size = math.lerp(f32(0), packet_size_in_buffer, ease_in_out(size_t))
 	}
 
-	scaled_circle(pos.x, pos.y, size, packet.color.x, packet.color.y, packet.color.z, 255)
+	color := packet.color != nil ? packet.color^ : packet.color_for_real
+	scaled_circle(pos.x, pos.y, size, color.x, color.y, color.z, 255)
 	packet.last_pos = packet.pos
 	packet.pos = pos
 }

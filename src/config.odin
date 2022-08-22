@@ -112,7 +112,7 @@ net_config := `
 				{ "ip": "4.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 },
 				{ "ip": "5.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 }
 			],
-			"packets_per_tick": 1
+			"packets_per_tick": 2
 		},
 		{
 			"name": "google",
@@ -123,7 +123,7 @@ net_config := `
 				{ "ip": "4.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0",   "interface": 1 }
 			],
-			"packets_per_tick": 1
+			"packets_per_tick": 2
 		},
 		{
 			"name": "cloudflare",
@@ -134,7 +134,7 @@ net_config := `
 				{ "ip": "3.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "5.0.0.0", "subnet": "255.0.0.0", "interface": 2 }
 			],
-			"packets_per_tick": 1
+			"packets_per_tick": 2
 		},
 		{
 			"name": "discord_hub",

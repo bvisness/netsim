@@ -710,7 +710,7 @@ new_tcp_session :: proc(n: ^Node, ip: u32) -> (int, bool) {
 
 	append(&n.tcp_sessions, TcpSession{
         ip = ip,
-        rcv_wnd = 200, // TODO(ben): This is arbitrary for now!
+        rcv_wnd = 400, // TODO(ben): This is arbitrary for now!
         cwnd = 2*SEG_SIZE, // Start small so we can see slow start.
         retransmit_timeout = new_retransmit_timeout(),
         received_data = strings.builder_make(),
