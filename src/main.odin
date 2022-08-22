@@ -605,14 +605,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 
 		y = pad_size + toolbar_height
-		draw_text("Node Inspector", Vec2{menu_offset, next_line(&y)}, 1.125, default_font, text_color); y += 1
-		draw_text(fmt.tprintf("Name: %s", inspect_node.name), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
-		draw_text(fmt.tprintf("Sent: %d", inspect_node.sent), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
-		draw_text(fmt.tprintf("Received: %d", inspect_node.received), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
-		draw_text(fmt.tprintf("Dropped: %d", inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		draw_text(inspect_node.name, Vec2{menu_offset, next_line(&y)}, 1.125, default_font, text_color); y += 1
+		draw_text(fmt.tprintf("Sent: %d, Received: %d, Dropped: %d", inspect_node.sent, inspect_node.received, inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		buffer_used := min(inspect_node.max_buffer_size, queue.len(inspect_node.buffer))
-		draw_text(fmt.tprintf("Buffer used: %d/%d", buffer_used, inspect_node.max_buffer_size), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		average_packet_ticks : u32 = 0
 		average_packet_ttl   : u32 = 0
@@ -628,12 +624,11 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			average_packet_ttl /= u32(node_packet_count)
 		}
 
-		draw_text(fmt.tprintf("Average Packet Ticks: %d", average_packet_ticks), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
-		draw_text(fmt.tprintf("Average Packet TTL: %d", average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		draw_text(fmt.tprintf("Avg Packet Ticks: %d, Avg Packet TTL: %d", average_packet_ticks, average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
 		// render history graphs
 		{
-			graph_pos := Vec2{menu_offset, next_line(&y) + pad_size}
+			graph_pos := Vec2{menu_offset, next_line(&y) + (pad_size / 2)}
 
 			gi := 0
 			next_graph_offset := proc(gi: ^int, y: ^f32) -> Vec2 {
@@ -659,7 +654,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				}
 				draw_graph(fmt.tprintf("Session %d Retransmit Queue", i+1), &sess.retransmit_history, graph_pos + next_graph_offset(&gi, &y))
 			}
-			next_line(&y)
 			next_line(&y)
 		}
 
