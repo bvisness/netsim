@@ -508,6 +508,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
     canvas_clear()
     draw_rect(rect(0, 0, width, height), 0, bg_color)
+    draw_rect(rect(0, toolbar_height, max_width + pad_size, height), 0, bg_color2)
 
 	// Render graph view
 
