@@ -744,9 +744,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		}
 
 		// render logs and debug info
-		logs_left: f32 = menu_offset + 600
+		logs_left: f32 = menu_offset + 580
 		logs_height: f32 = 900
-		logs_width: f32 = 600
+		logs_width: f32 = 560
 
 		y = pad_size + toolbar_height
 
@@ -775,7 +775,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			next_line(&y)
 		}
 
-		log_lines := 40
+		log_lines := 25
 		outline_width : f32 = 2
 		draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 		draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)

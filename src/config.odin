@@ -96,7 +96,7 @@ net_config := `
 	"nodes": [
 		{
 			"name": "me",
-			"pos": { "x": 0, "y": 400 },
+			"pos": { "x": 0, "y": 150 },
 			"interfaces": [ "2.2.2.123" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 }
@@ -104,7 +104,7 @@ net_config := `
 		},
 		{
 			"name": "comcast",
-			"pos": { "x": 200, "y": 400 },
+			"pos": { "x": 150, "y": 150 },
 			"interfaces": [ "2.2.2.1", "2.2.2.2", "2.2.2.3" ],
 			"rules": [
 				{ "ip": "2.2.2.123", "subnet": "255.255.255.255", "interface": 0 },
@@ -116,7 +116,7 @@ net_config := `
 		},
 		{
 			"name": "4chan",
-			"pos": { "x": 400, "y": 200 },
+			"pos": { "x": 300, "y": 0 },
 			"interfaces": [ "3.3.3.1", "3.3.3.2" ],
 			"rules": [
 				{ "ip": "2.0.0.0", "subnet": "255.0.0.0", "interface": 0 },
@@ -127,7 +127,7 @@ net_config := `
 		},
 		{
 			"name": "cloudflare",
-			"pos": { "x": 400, "y": 600 },
+			"pos": { "x": 300, "y": 300 },
 			"interfaces": [ "4.4.4.1", "4.4.4.2", "4.4.4.3" ],
 			"rules": [
 				{ "ip": "2.0.0.0", "subnet": "255.0.0.0", "interface": 0 },
@@ -138,7 +138,7 @@ net_config := `
 		},
 		{
 			"name": "discord_hub",
-			"pos": { "x": 600, "y": 600 },
+			"pos": { "x": 450, "y": 300 },
 			"interfaces": [ "5.5.5.1", "5.5.5.2", "5.5.5.2", "5.5.5.2" ],
 			"rules": [
 				{ "ip": "4.0.0.0",   "subnet": "255.0.0.0",       "interface": 0 },
@@ -151,7 +151,7 @@ net_config := `
 		},
 		{
 			"name": "discord_1",
-			"pos": { "x": 750, "y": 475 },
+			"pos": { "x": 600, "y": 200 },
 			"interfaces": [ "5.5.100.1" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
@@ -159,7 +159,7 @@ net_config := `
 		},
 		{
 			"name": "discord_2",
-			"pos": { "x": 750, "y": 600 },
+			"pos": { "x": 600, "y": 300 },
 			"interfaces": [ "5.5.100.2" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
@@ -167,7 +167,7 @@ net_config := `
 		},
 		{
 			"name": "discord_3",
-			"pos": { "x": 750, "y": 725 },
+			"pos": { "x": 600, "y": 400 },
 			"interfaces": [ "5.5.100.3" ],
 			"rules": [
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0", "interface": 0 },
