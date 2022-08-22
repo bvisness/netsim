@@ -112,10 +112,10 @@ net_config := `
 				{ "ip": "4.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 },
 				{ "ip": "5.0.0.0",   "subnet": "255.0.0.0",       "interface": 2 }
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 3
 		},
 		{
-			"name": "google",
+			"name": "4chan",
 			"pos": { "x": 400, "y": 200 },
 			"interfaces": [ "3.3.3.1", "3.3.3.2" ],
 			"rules": [
@@ -123,7 +123,7 @@ net_config := `
 				{ "ip": "4.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "0.0.0.0", "subnet": "0.0.0.0",   "interface": 1 }
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 3
 		},
 		{
 			"name": "cloudflare",
@@ -134,7 +134,7 @@ net_config := `
 				{ "ip": "3.0.0.0", "subnet": "255.0.0.0", "interface": 1 },
 				{ "ip": "5.0.0.0", "subnet": "255.0.0.0", "interface": 2 }
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 3
 		},
 		{
 			"name": "discord_hub",
@@ -147,7 +147,7 @@ net_config := `
 				{ "ip": "5.5.100.3", "subnet": "255.255.255.255", "interface": 3 },
 				{ "ip": "0.0.0.0",   "subnet": "0.0.0.0",         "interface": 0 },
 			],
-			"packets_per_tick": 2
+			"packets_per_tick": 3
 		},
 		{
 			"name": "discord_1",

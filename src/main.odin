@@ -70,6 +70,7 @@ first_frame := true
 muted := false
 running := false
 congestion_control_on := true
+danger_danger_warning_idiots := false
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
@@ -137,7 +138,7 @@ reset_everything :: proc() {
 }
 
 init_state :: proc() {
-	set_timescale(0.2)
+	set_timescale(1)
 
 	nodes = make([dynamic]Node)
 	conns = make([dynamic]Connection)
@@ -365,7 +366,7 @@ tick :: proc() {
 	// And extra fun stuff we do on each tick for testing:
 
 	// Generate random packets, huzzah
-	if tick_count % 2 == 0 {
+	if danger_danger_warning_idiots {
 		for i := 0; i < 2; i += 1 {
 			generate_random_packet()
 		}
@@ -374,6 +375,7 @@ tick :: proc() {
 	send_data_via_tcp(nodes_by_name["me"], nodes_by_name["discord_1"], MUCH_ADO)
 	send_data_via_tcp(nodes_by_name["discord_1"], nodes_by_name["discord_2"], CHEATER)
 	send_data_via_tcp(nodes_by_name["discord_2"], nodes_by_name["discord_3"], GETTYSBURG)
+	send_data_via_tcp(nodes_by_name["discord_3"], nodes_by_name["4chan"], NAVY_SEAL)
 
 	// Update stat histories
 	for node in &nodes {
@@ -859,6 +861,18 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		if button(rect(edge_pad + ((button_width + button_pad) * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf051", icon_font) {
 			tick()
 		}
+	}
+	if button(rect(edge_pad + ((button_width + button_pad) * 3), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf04e", icon_font) {
+		if timescale == 1 {
+			set_timescale(0.4)
+		} else if timescale == 0.4 {
+			set_timescale(0.2)
+		} else {
+			set_timescale(1)
+		}
+	}
+	if button(rect(edge_pad + ((button_width + button_pad) * 4), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf071", icon_font) {
+		danger_danger_warning_idiots = !danger_danger_warning_idiots
 	}
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), muted ? "\uf028" : "\uf026", icon_font) {
 		muted = !muted
