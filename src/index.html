@@ -246,6 +246,7 @@
 				},
 			});
 
+			// init muted variable, so user mute state can be saved across refreshes
 			let ret = sessionStorage.getItem("muted");
 			if (ret !== "true" && ret !== "false") {
 				sessionStorage.setItem("muted", "false");

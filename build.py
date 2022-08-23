@@ -12,14 +12,7 @@ import sys
 RELEASE = len(sys.argv) > 1 and sys.argv[1] == 'release'
 
 odin = 'odin'
-clang = 'clang'
 wasmld = 'wasm-ld'
-
-try:
-    subprocess.run(['clang-10', '-v'], stderr=subprocess.DEVNULL)
-    clang = 'clang-10'
-except FileNotFoundError:
-    pass
 
 try:
     subprocess.run(['wasm-ld-10', '-v'], stdout=subprocess.DEVNULL)
