@@ -780,6 +780,10 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			logs_width: f32 = tab_width - pad_size
 
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+
+			mono_ch_width := measure_text("a", 1, monospace_font)
+			line_width := int(math.floor((tab_width - pad_size) / mono_ch_width))
+
 			if len(inspect_node.tcp_sessions) > 0 {
 				for sess in inspect_node.tcp_sessions {
 					draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
@@ -792,7 +796,6 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					leftover_lines := 4
 					if strings.builder_len(sess.received_data) > 0 {
 						data := strings.to_string(sess.received_data)
-						line_width := 64
 
 						draw_text("Received data:", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 						length_in_lines := int(math.ceil(f32(len(data))/f32(line_width)))
