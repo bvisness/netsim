@@ -976,6 +976,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		colormode = new_colormode
 	}
 
+	// re-center/re-scale network
+	if button(rect(width - edge_pad - (button_width * 3) - (button_pad * 2), (toolbar_height / 2) - (button_height / 2), button_width, button_height), "\uf192", icon_font) {
+		scale = 1
+		pan = Vec2{(graph_width / 2) - (max_width / 2), (graph_height / 2) - (max_height / 2)}
+	}
+
 	if !is_hovering {
 		reset_cursor()
 	}
