@@ -942,9 +942,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	case .Auto:
 		color_text = "\uf042"
 	case .Dark:
-		color_text = "\uf111" 
-	case .Light:
 		color_text = "\uf10c" 
+	case .Light:
+		color_text = "\uf111" 
 	}
 
 	if button(rect(width - edge_pad - (button_width * 2) - button_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
