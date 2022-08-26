@@ -262,11 +262,44 @@
 				window.requestAnimationFrame(doFrame);
 			}
 
+			window.addEventListener('touchstart', e => {
+				e.preventDefault();
+				let touch = e.changedTouches[0];
+	
+				const containerRect = canvasContainer.getBoundingClientRect();
+				let x = touch.clientX - containerRect.x;
+				let y = touch.clientY - containerRect.y;
+				window.wasm.mouse_down(x, y);
+				wakeUp();
+			}, {passive: false});
+			window.addEventListener('touchmove', e => {
+				e.preventDefault();
+				let touch = e.changedTouches[0];
+
+				const containerRect = canvasContainer.getBoundingClientRect();
+				let x = touch.clientX - containerRect.x;
+				let y = touch.clientY - containerRect.y;
+				window.wasm.mouse_move(x, y);
+				wakeUp();
+			}, {passive: false});
+			window.addEventListener('touchend', e => {
+				e.preventDefault();
+				let touch = e.changedTouches[0];
+
+				const containerRect = canvasContainer.getBoundingClientRect();
+				let x = touch.clientX - containerRect.x;
+				let y = touch.clientY - containerRect.y;
+				window.wasm.mouse_up(x, y);
+				wakeUp();
+			}, {passive: false});
+
 			window.addEventListener('mousemove', e => {
 				const containerRect = canvasContainer.getBoundingClientRect();
-				window.wasm.mouse_move(e.clientX - containerRect.x, e.clientY - containerRect.y);
+				let x = e.clientX - containerRect.x;
+				let y = e.clientY - containerRect.y;
+				window.wasm.mouse_move(x, y);
 				wakeUp();
-			});
+			}, false);
 			window.addEventListener('mousedown', e => {
 				if (e.button != 0) {
 					return;
@@ -277,14 +310,19 @@
 				}
 
 				const containerRect = canvasContainer.getBoundingClientRect();
-				window.wasm.mouse_down(e.clientX - containerRect.x, e.clientY - containerRect.y);
+				let x = e.clientX - containerRect.x;
+				let y = e.clientY - containerRect.y;
+				window.wasm.mouse_down(x, y);
 				wakeUp();
-			});
+			}, false);
 			window.addEventListener('mouseup', e => {
 				const containerRect = canvasContainer.getBoundingClientRect();
-				window.wasm.mouse_up(e.clientX - containerRect.x, e.clientY - containerRect.y);
+
+				let x = e.clientX - containerRect.x;
+				let y = e.clientY - containerRect.y;
+				window.wasm.mouse_up(x, y);
 				wakeUp();
-			});
+			}, false);
 
 			function specialKeyEvent(downOrUp, e) {
 				e.preventDefault();

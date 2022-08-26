@@ -27,6 +27,7 @@ nodes_by_name : map[string]^Node
 t           : f32
 last_tick_t : f32
 tick_count  : int
+frame_count : int
 
 min_width  : f32
 min_height : f32
@@ -60,9 +61,8 @@ scroll_velocity: f32 = 0
 log_scroll_y   : f32 = 0
 
 is_mouse_down := false
-was_mouse_down := false
-clicked := false
-is_hovering := false
+clicked       := false
+is_hovering   := false
 
 node_selected := -1
 hash := 0
@@ -161,6 +161,7 @@ init_state :: proc() {
 	t = 0
 	last_tick_t = t
 	tick_count = 0
+	frame_count = 0
 
 	scale = 1
 	min_width  = 10000
@@ -434,7 +435,7 @@ send_data_via_tcp :: proc(src, dst: ^Node, data: string) -> bool {
 		// HACK: Open up destination for listening
 		dst.listening = true
 		
-		fmt.printf("Sending data from %s to %s: %s\n", src.name, dst.name, data)
+		//fmt.printf("Sending data from %s to %s: %s\n", src.name, dst.name, data)
 		tcp_send(sess, data)
 		return true
 	}
@@ -448,6 +449,7 @@ random_seed: u64
 frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     context = wasmContext
 	defer free_all(context.temp_allocator)
+	defer frame_count += 1
 
 	// This is nasty code that allows me to do load-time things once the wasm context is init
 	if first_frame {
@@ -461,12 +463,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		first_frame = false
 	}
 
-	if !was_mouse_down && is_mouse_down {
-		clicked = true
-		clicked_pos = mouse_pos
+	defer if clicked {
+		clicked = false
 	}
-	defer was_mouse_down = is_mouse_down
-	defer clicked = false
 	defer scroll_velocity = 0
 	defer is_hovering = false
 
@@ -486,8 +485,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	pan_delta := Vec2{}
 	if is_mouse_down {
 		if pt_in_rect(clicked_pos, rect(0, toolbar_height, max_width, height)) {
-			pan_delta.x = mouse_pos.x - last_mouse_pos.x
-			pan_delta.y = mouse_pos.y - last_mouse_pos.y
+			pan_delta = mouse_pos - last_mouse_pos
 		}
 		last_mouse_pos = mouse_pos
 	}

@@ -11,23 +11,26 @@ set_text_height :: proc "contextless" (height: f32) {
 }
 
 @export
-mouse_move :: proc "contextless" (x, y: int) {
+mouse_move :: proc "contextless" (x, y: f32) {
 	last_mouse_pos = mouse_pos
-	mouse_pos = Vec2{f32(x), f32(y)}
+	mouse_pos = Vec2{x, y}
 }
 
 @export
-mouse_down :: proc "contextless" (x, y: int) {
+mouse_down :: proc "contextless" (x, y: f32) {
 	is_mouse_down = true
+	mouse_pos = Vec2{x, y}
 	last_mouse_pos = mouse_pos
-	mouse_pos = Vec2{f32(x), f32(y)}
+
+	clicked = true
+	clicked_pos = mouse_pos
 }
 
 @export
-mouse_up :: proc "contextless" (x, y: int) {
+mouse_up :: proc "contextless" (x, y: f32) {
 	is_mouse_down = false
 	last_mouse_pos = mouse_pos
-	mouse_pos = Vec2{f32(x), f32(y)}
+	mouse_pos = Vec2{x, y}
 }
 
 @export
