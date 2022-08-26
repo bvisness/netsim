@@ -39,9 +39,18 @@ get_current_field :: proc() -> (int, bool) {
 	return 0, false
 }
 
-Node :: struct {
-	logs: queue.Queue(LogEntry), // DO NOT MOVE ELSEWHERE IN THE STRUCT
+MenuTabType :: enum {
+	Graphs,
+	Logs,
+	Rules,
+	Config,
+}
+MenuTab :: struct {
+	type: MenuTabType,
+	label: string,
+}
 
+Node :: struct {
 	pos: Vec2,
 
 	name: string,
@@ -68,6 +77,7 @@ Node :: struct {
 
 	listening: bool,
 	tcp_sessions: [dynamic]TcpSession,
+	logs: queue.Queue(LogEntry), 
 }
 
 LogEntry :: struct {

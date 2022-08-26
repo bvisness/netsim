@@ -38,7 +38,9 @@ bg_color      := Vec3{}
 bg_color2     := Vec3{}
 text_color    := Vec3{}
 text_color2   := Vec3{}
+text_color3   := Vec3{}
 button_color  := Vec3{}
+button_color2 := Vec3{}
 line_color    := Vec3{}
 outline_color := Vec3{}
 graph_color   := Vec3{}
@@ -72,6 +74,9 @@ muted := false
 running := false
 congestion_control_on := true
 danger_danger_warning_idiots := false
+
+
+tab_selected := MenuTabType.Graphs
 
 pad_size       : f32 = 40
 toolbar_height : f32 = 40
@@ -111,6 +116,8 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		bg_color2     = Vec3{0,     0,   0}
 		text_color    = Vec3{255, 255, 255}
 		text_color2   = Vec3{180, 180, 180}
+		text_color3   = Vec3{180, 180, 180}
+		button_color  = Vec3{40,   40,  40}
 		button_color  = Vec3{40,   40,  40}
 		line_color    = Vec3{100, 100, 100}
 		outline_color = Vec3{80,   80,  80}
@@ -123,7 +130,9 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		bg_color2     = Vec3{255, 255, 255}
 		text_color    = Vec3{0,     0,   0}
 		text_color2   = Vec3{80,   80,  80}
-		button_color  = Vec3{161, 139, 124}
+		text_color3   = Vec3{250, 250, 250}
+		button_color  = Vec3{141, 119, 104}
+		button_color2 = Vec3{191, 169, 154}
 		line_color    = Vec3{219, 211, 205}
 		outline_color = Vec3{219, 211, 205}
 		node_color    = Vec3{129, 100,  80}
@@ -607,6 +616,8 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if node_selected != -1 {
 		inspect_node := &nodes[node_selected]
 
+		tab_width : f32 = 600
+
 		y: f32 = 0
 		next_line := proc(y: ^f32) -> f32 {
 			res := y^
@@ -614,30 +625,50 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 			return res
 		}
 
-		y = pad_size + toolbar_height
-		draw_text(inspect_node.name, Vec2{menu_offset, next_line(&y)}, 1.125, default_font, text_color); y += 1
-		draw_text(fmt.tprintf("Sent: %d, Received: %d, Dropped: %d", inspect_node.sent, inspect_node.received, inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		y = toolbar_height + (pad_size / 2)
+		draw_text(inspect_node.name, Vec2{menu_offset, next_line(&y)}, 1.25, default_font, text_color); y += 15
+		
+		text_height = get_text_height(1, default_font)
+		menu_options := [3]MenuTab{{MenuTabType.Graphs, "Graphs"}, {MenuTabType.Logs, "Logs"}, {MenuTabType.Rules, "Rules"}}
+		tab_offset : f32 = 0
+		tab_pad : f32 = 10
+		for opt in menu_options {
+			text_width := measure_text(opt.label, 1, default_font)
 
-		buffer_used := min(inspect_node.max_buffer_size, queue.len(inspect_node.buffer))
-
-		average_packet_ticks : u32 = 0
-		average_packet_ttl   : u32 = 0
-		node_packet_count := queue.len(inspect_node.buffer)
-
-		if node_packet_count > 0 {
-			for i := 0; i < node_packet_count; i += 1 {
-				packet := queue.get_ptr(&inspect_node.buffer, i)
-				average_packet_ticks += packet.tick_life
-				average_packet_ttl += packet.ttl
+			selected := tab_selected == opt.type
+			if tab(rect(menu_offset + tab_offset, y, text_width + (tab_pad * 2), text_height + (tab_pad * 2)), opt.label, default_font, selected) {
+				tab_selected = opt.type
 			}
-			average_packet_ticks /= u32(node_packet_count)
-			average_packet_ttl /= u32(node_packet_count)
+
+			tab_offset += text_width + (tab_pad * 2)
 		}
+		draw_line(Vec2{max_width + pad_size, y + text_height + (tab_pad * 2)}, Vec2{menu_offset + tab_width, y + text_height + (tab_pad * 2)}, 2, line_color)
+		y += text_height + (tab_pad * 2)
+		next_line(&y)
 
-		draw_text(fmt.tprintf("Avg Packet Ticks: %d, Avg Packet TTL: %d", average_packet_ticks, average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+		#partial switch tab_selected {
+		case .Graphs:
+			draw_text(fmt.tprintf("Sent: %d, Received: %d, Dropped: %d", inspect_node.sent, inspect_node.received, inspect_node.dropped), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
 
-		// render history graphs
-		{
+			buffer_used := min(inspect_node.max_buffer_size, queue.len(inspect_node.buffer))
+
+			average_packet_ticks : u32 = 0
+			average_packet_ttl   : u32 = 0
+			node_packet_count := queue.len(inspect_node.buffer)
+
+			if node_packet_count > 0 {
+				for i := 0; i < node_packet_count; i += 1 {
+					packet := queue.get_ptr(&inspect_node.buffer, i)
+					average_packet_ticks += packet.tick_life
+					average_packet_ttl += packet.ttl
+				}
+				average_packet_ticks /= u32(node_packet_count)
+				average_packet_ttl /= u32(node_packet_count)
+			}
+
+			draw_text(fmt.tprintf("Avg Packet Ticks: %d, Avg Packet TTL: %d", average_packet_ticks, average_packet_ttl), Vec2{menu_offset, next_line(&y)}, 1, monospace_font, text_color2)
+
+			// render history graphs
 			graph_pos := Vec2{menu_offset, next_line(&y) + (pad_size / 2)}
 
 			gi := 0
@@ -664,11 +695,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 				}
 				draw_graph(fmt.tprintf("Session %d Retransmit Queue", i+1), &sess.retransmit_history, graph_pos + next_graph_offset(&gi, &y))
 			}
-			next_line(&y)
-		}
-
-		// render rule viewer
-		{
+		case .Rules:
 			rule_left: f32 = menu_offset
 
 			draw_text("NICs:", Vec2{rule_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
@@ -745,81 +772,90 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 					append(&inspect_node.routing_rules, RoutingRule{ip = ip, subnet_mask = subnet, interface_id = val - 1})
 				}
 			}
-		}
+		case .Logs:
+			logs_left: f32 = menu_offset
+			logs_height: f32 = 600
+			logs_width: f32 = 560
 
-		// render logs and debug info
-		logs_left: f32 = menu_offset + 580
-		logs_height: f32 = 900
-		logs_width: f32 = 560
-
-		y = pad_size + toolbar_height
-
-		if len(inspect_node.tcp_sessions) > 0 {
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+			if len(inspect_node.tcp_sessions) > 0 {
+				for sess in inspect_node.tcp_sessions {
+					draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.snd_nxt, sess.snd_wnd, sess.snd_una), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.rcv_nxt, sess.rcv_wnd), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.iss, sess.irs), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+					draw_text(fmt.tprintf("  CWND: %v, SENT=%v, ACKED=%v", sess.cwnd, sess.cwnd_sent, sess.cwnd_acked), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
 
-			for sess in inspect_node.tcp_sessions {
-				draw_text(fmt.tprintf("%s: %v", ip_to_str(sess.ip), sess.state), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  SND: NXT=%v, WND=%v, UNA=%v", sess.snd_nxt, sess.snd_wnd, sess.snd_una), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  RCV: NXT=%v, WND=%v", sess.rcv_nxt, sess.rcv_wnd), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  ISS: %v, IRS: %v", sess.iss, sess.irs), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				draw_text(fmt.tprintf("  CWND: %v, SENT=%v, ACKED=%v", sess.cwnd, sess.cwnd_sent, sess.cwnd_acked), Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-				if strings.builder_len(sess.received_data) > 0 {
-					data := strings.to_string(sess.received_data)
-					line_width := 64
+					max_lines := 4
+					leftover_lines := 4
+					if strings.builder_len(sess.received_data) > 0 {
+						data := strings.to_string(sess.received_data)
+						line_width := 64
 
-					draw_text("Received data:", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-					length_in_lines := int(math.ceil(f32(len(data))/f32(line_width)))
-					visible_data := data[max(0, (length_in_lines-4)*line_width):]
-					for i := 0; i < len(visible_data); i += line_width {
-						draw_text(visible_data[i:min(i+line_width, len(visible_data))], Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+						draw_text("Received data:", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+						length_in_lines := int(math.ceil(f32(len(data))/f32(line_width)))
+						visible_data := data[max(0, (length_in_lines-max_lines)*line_width):]
+						for i := 0; i < len(visible_data); i += line_width {
+							draw_text(visible_data[i:min(i+line_width, len(visible_data))], Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+						}
+
+						leftover_lines -= length_in_lines
+					} else {
+						next_line(&y)
+					}
+
+					for i := 0; i < leftover_lines; i += 1 {
+						next_line(&y)	
 					}
 				}
+
+				next_line(&y)
+
+				log_lines := 25
+				outline_width : f32 = 2
+				draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
+				draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
+
+				draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, outline_color)
+
+				logs_left += 5
+
+				if queue.len(inspect_node.logs) > log_lines {
+					draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
+				} else {
+					next_line(&y)
+				}
+
+				iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
+				iter_end := queue.len(inspect_node.logs) - 1
+
+				current_tick := -1
+				tick_changed := false
+				time_str := ""
+				time_width : f32 = 0
+				time_gap : f32 = 10
+				for i := iter_start; i <= iter_end; i += 1 {
+					msg := queue.get(&inspect_node.logs, i)
+
+					if msg.timestamp != current_tick {
+						current_tick = msg.timestamp
+						tick_changed = true
+
+						time_str = fmt.tprintf("%d", msg.timestamp)
+						time_width = measure_text(time_str, 1, monospace_font)
+					}
+
+					if tick_changed {
+						y += text_height
+						draw_text(time_str, Vec2{logs_left, y}, 1, monospace_font, text_color)
+					}
+					draw_text(msg.content, Vec2{logs_left + time_width + time_gap, next_line(&y)}, 1, monospace_font, text_color2)
+
+					tick_changed = false
+				}
+			} else {
+				draw_text("Nothing yet!", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2); y += 1
 			}
-
-			next_line(&y)
-		}
-
-		log_lines := 25
-		outline_width : f32 = 2
-		draw_text("Logs:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
-		draw_rect(rect(logs_left, y + 4, logs_width, logs_height), 2, bg_color2)
-
-		draw_rect_outline(rect(logs_left - outline_width - (outline_width / 2), y - outline_width - (outline_width / 2) + 4, logs_width + outline_width + (outline_width / 2), logs_height + outline_width + (outline_width / 2)), outline_width, outline_color)
-
-		logs_left += 5
-
-		if queue.len(inspect_node.logs) > log_lines {
-			draw_text("...", Vec2{logs_left, next_line(&y)}, 1, monospace_font, text_color2)
-		} else {
-			next_line(&y)
-		}
-
-		iter_start := queue.len(inspect_node.logs) - min(log_lines, queue.len(inspect_node.logs))
-		iter_end := queue.len(inspect_node.logs) - 1
-
-		current_tick := -1
-		tick_changed := false
-		time_str := ""
-		time_width : f32 = 0
-		time_gap : f32 = 10
-		for i := iter_start; i <= iter_end; i += 1 {
-			msg := queue.get(&inspect_node.logs, i)
-
-			if msg.timestamp != current_tick {
-				current_tick = msg.timestamp
-				tick_changed = true
-
-				time_str = fmt.tprintf("%d", msg.timestamp)
-				time_width = measure_text(time_str, 1, monospace_font)
-			}
-
-			if tick_changed {
-				y += text_height
-				draw_text(time_str, Vec2{logs_left, y}, 1, monospace_font, text_color)
-			}
-			draw_text(msg.content, Vec2{logs_left + time_width + time_gap, next_line(&y)}, 1, monospace_font, text_color2)
-
-			tick_changed = false
 		}
 	}
 
@@ -1064,17 +1100,42 @@ pt_in_rect :: proc(pt: Vec2, box: Rect) -> bool {
 	return x1 <= pt.x && pt.x <= x2 && y1 <= pt.y && pt.y <= y2
 }
 
-button :: proc(rect: Rect, text: string, font: string) -> bool {
-	draw_rect(rect, 3, button_color)
+button :: proc(in_rect: Rect, text: string, font: string) -> bool {
+	draw_rect(in_rect, 3, button_color)
 	text_width := measure_text(text, 1, font)
 	text_height = get_text_height(1, font)
-	draw_text(text, Vec2{rect.pos.x + rect.size.x/2 - text_width/2, rect.pos.y+(text_height / 2)}, 1, font, text_color)
+	draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color3)
 
-	if pt_in_rect(mouse_pos, rect) {
+	if pt_in_rect(mouse_pos, in_rect) {
 		set_cursor("pointer")
 		if clicked {
 			return true
 		}
 	}
+	return false
+}
+
+tab :: proc(in_rect: Rect, text: string, font: string, selected: bool) -> bool {
+	text_width := measure_text(text, 1, font)
+	text_height = get_text_height(1, font)
+
+	if selected {
+		draw_rect(in_rect, 0, button_color)
+		draw_rect_outline(in_rect, 1, button_color)
+		draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color3)
+	} else {
+		draw_rect(in_rect, 0, button_color2)
+		draw_rect_outline(in_rect, 1, button_color)
+		draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color)
+	}
+
+
+	if pt_in_rect(mouse_pos, in_rect) && !selected {
+		set_cursor("pointer")
+		if clicked {
+			return true
+		}
+	}
+
 	return false
 }
