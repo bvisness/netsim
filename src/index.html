@@ -16,6 +16,7 @@
 
 		body {
 			font-family: -apple-system,BlinkMacSystemFont,segoe ui,Helvetica,Arial,sans-serif,apple color emoji,segoe ui emoji,segoe ui symbol;
+			touch-action: none;
 
 		}
 
@@ -262,35 +263,62 @@
 				window.requestAnimationFrame(doFrame);
 			}
 
+			let pinch_start_pos = [];
 			window.addEventListener('touchstart', e => {
 				e.preventDefault();
-				let touch = e.changedTouches[0];
-	
+
 				const containerRect = canvasContainer.getBoundingClientRect();
-				let x = touch.clientX - containerRect.x;
-				let y = touch.clientY - containerRect.y;
-				window.wasm.mouse_down(x, y);
-				wakeUp();
+				if (e.touches.length === 1) {
+					let touch = e.touches[0];
+		
+					let x = touch.clientX - containerRect.x;
+					let y = touch.clientY - containerRect.y;
+					window.wasm.mouse_down(x, y);
+					wakeUp();
+				} else if (e.touches.length === 2) {
+					pinch_start_pos[0] = {x: (e.touches[0].clientX - containerRect.x), y: (e.touches[0].clientY - containerRect.y)};
+					pinch_start_pos[1] = {x: (e.touches[1].clientX - containerRect.x), y: (e.touches[1].clientY - containerRect.y)};
+				}
 			}, {passive: false});
 			window.addEventListener('touchmove', e => {
 				e.preventDefault();
-				let touch = e.changedTouches[0];
 
 				const containerRect = canvasContainer.getBoundingClientRect();
-				let x = touch.clientX - containerRect.x;
-				let y = touch.clientY - containerRect.y;
-				window.wasm.mouse_move(x, y);
-				wakeUp();
+				if (e.touches.length === 1) {
+					let touch = e.touches[0];
+
+					let x = touch.clientX - containerRect.x;
+					let y = touch.clientY - containerRect.y;
+					window.wasm.mouse_move(x, y);
+					wakeUp();
+				} else if (e.touches.length === 2) {
+					let new_start_pos = [];
+					new_start_pos[0] = {x: (e.touches[0].clientX - containerRect.x), y: (e.touches[0].clientY - containerRect.y)};
+					new_start_pos[1] = {x: (e.touches[1].clientX - containerRect.x), y: (e.touches[1].clientY - containerRect.y)};
+
+					let old_dist = Math.hypot(pinch_start_pos[0].x - pinch_start_pos[1].x, pinch_start_pos[0].y - pinch_start_pos[1].y);
+					let new_dist = Math.hypot(new_start_pos[0].x - new_start_pos[1].x, new_start_pos[0].y - new_start_pos[1].y);
+
+					let deltaY = new_dist - old_dist;
+
+					window.wasm.scroll(0, deltaY * 2);
+					pinch_start_pos = new_start_pos;
+				}
 			}, {passive: false});
 			window.addEventListener('touchend', e => {
 				e.preventDefault();
-				let touch = e.changedTouches[0];
 
 				const containerRect = canvasContainer.getBoundingClientRect();
-				let x = touch.clientX - containerRect.x;
-				let y = touch.clientY - containerRect.y;
-				window.wasm.mouse_up(x, y);
-				wakeUp();
+				if (e.touches.length === 1) {
+					let touch = e.touches[0];
+
+					let x = touch.clientX - containerRect.x;
+					let y = touch.clientY - containerRect.y;
+					window.wasm.mouse_up(x, y);
+					wakeUp();
+				} else if (e.touches.length === 2) {
+					pinch_start_pos = [];
+				}
 			}, {passive: false});
 
 			window.addEventListener('mousemove', e => {
@@ -299,7 +327,7 @@
 				let y = e.clientY - containerRect.y;
 				window.wasm.mouse_move(x, y);
 				wakeUp();
-			}, false);
+			});
 			window.addEventListener('mousedown', e => {
 				if (e.button != 0) {
 					return;
@@ -314,7 +342,7 @@
 				let y = e.clientY - containerRect.y;
 				window.wasm.mouse_down(x, y);
 				wakeUp();
-			}, false);
+			});
 			window.addEventListener('mouseup', e => {
 				const containerRect = canvasContainer.getBoundingClientRect();
 
@@ -322,7 +350,7 @@
 				let y = e.clientY - containerRect.y;
 				window.wasm.mouse_up(x, y);
 				wakeUp();
-			}, false);
+			});
 
 			function specialKeyEvent(downOrUp, e) {
 				e.preventDefault();

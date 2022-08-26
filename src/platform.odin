@@ -34,8 +34,8 @@ mouse_up :: proc "contextless" (x, y: f32) {
 }
 
 @export
-scroll :: proc "contextless" (x, y: int) {
-	scroll_velocity = f32(y)
+scroll :: proc "contextless" (x, y: f32) {
+	scroll_velocity = y
 }
 
 shift_down := false
