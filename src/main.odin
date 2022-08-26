@@ -472,12 +472,15 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     t += dt
 
 	// compute graph scale
+
+	MIN_SCALE :: 0.1
+	MAX_SCALE :: 2.5
 	if pt_in_rect(mouse_pos, rect(0, toolbar_height, max_width, height)) {
 		scale *= 1 + (0.05 * scroll_velocity * dt)
-		if scale < 0.1 {
-			scale = 0.1
-		} else if scale > 1.5 {
-			scale = 1.5
+		if scale < MIN_SCALE {
+			scale = MIN_SCALE
+		} else if scale > MAX_SCALE {
+			scale = MAX_SCALE
 		}
 	}
 
