@@ -609,7 +609,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, 0, width, toolbar_height), 0, toolbar_color)
 
 	// Render menu view
-    draw_rect(rect(menu_offset, toolbar_height, tab_width, height), 0, bg_color)
+    draw_rect(rect(menu_offset, toolbar_height, tab_width + pad_size, height), 0, bg_color)
 
 	// draw menu border
 	draw_line(Vec2{menu_offset, toolbar_height}, Vec2{menu_offset, height}, 2, line_color)
