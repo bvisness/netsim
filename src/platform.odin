@@ -150,6 +150,7 @@ foreign js {
 	set_session_storage :: proc(key: string, val: string) ---
 	get_time :: proc() -> f64 ---
 	change_cursor :: proc(cursor: string) ---
+	get_system_color :: proc() -> bool ---
 }
 
 draw_rect :: proc(rect: Rect, radius: f32, color: Vec3, a: f32 = 255) {

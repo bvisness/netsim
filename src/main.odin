@@ -73,8 +73,14 @@ first_frame := true
 muted := false
 running := false
 congestion_control_on := true
+colormode := ColorMode.Dark
 danger_danger_warning_idiots := false
 
+ColorMode :: enum {
+	Dark,
+	Light,
+	Auto
+}
 
 tab_selected := MenuTabType.Graphs
 
@@ -110,7 +116,7 @@ set_timescale :: proc(new_timescale: f32) {
 }
 
 @export
-set_color_mode :: proc "contextless" (is_dark: bool) {
+set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 	if is_dark {
 		bg_color      = Vec3{15,   15,  15}
 		bg_color2     = Vec3{0,     0,   0}
@@ -139,6 +145,12 @@ set_color_mode :: proc "contextless" (is_dark: bool) {
 		node_color2   = Vec3{189, 160, 140}
 		graph_color   = Vec3{69,   49,  34}
 		toolbar_color = Vec3{219, 211, 205}
+	}
+
+	if auto {
+		colormode = ColorMode.Auto
+	} else {
+		colormode = is_dark ? ColorMode.Dark : ColorMode.Light
 	}
 }
 
@@ -923,6 +935,45 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	if button(rect(width - edge_pad - button_width, (toolbar_height / 2) - (button_height / 2), button_width, button_height), muted ? "\uf028" : "\uf026", icon_font) {
 		muted = !muted
 		set_session_storage("muted", muted ? "true": "false")
+	}
+
+	color_text : string
+	switch colormode {
+	case .Auto:
+		color_text = "\uf042"
+	case .Dark:
+		color_text = "\uf111" 
+	case .Light:
+		color_text = "\uf10c" 
+	}
+
+	if button(rect(width - edge_pad - (button_width * 2) - button_pad, (toolbar_height / 2) - (button_height / 2), button_width, button_height), color_text, icon_font) {
+
+		new_colormode: ColorMode
+
+		// rotate between auto, dark, and light
+		switch colormode {
+		case .Auto:
+			new_colormode = .Dark
+		case .Dark:
+			new_colormode = .Light
+		case .Light:
+			new_colormode = .Auto
+		}
+
+		switch new_colormode {
+		case .Auto:
+			is_dark := get_system_color()
+			set_color_mode(true, is_dark)
+			set_session_storage("colormode", "auto")
+		case .Dark:
+			set_color_mode(false, true)
+			set_session_storage("colormode", "dark")
+		case .Light:
+			set_color_mode(false, false)
+			set_session_storage("colormode", "light")
+		}
+		colormode = new_colormode
 	}
 
 	if !is_hovering {

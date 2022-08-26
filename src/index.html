@@ -103,6 +103,10 @@
 			}
 		}
 
+		function get_system_colormode() {
+			return window.matchMedia('(prefers-color-scheme: dark)').matches;
+		}
+
 		async function init() {
 			window.wasm = await odin.runWasm('netsim_patched.wasm', null, {
 				js: {
@@ -243,15 +247,19 @@
 						const font = window.wasm.odinMem.loadString(f, flen);
 						updateFont(size, font);
 						return cached_height;
+					},
+					get_system_color() {
+						return get_system_colormode()
 					}
 				},
 			});
 
 			// init muted variable, so user mute state can be saved across refreshes
-			let ret = sessionStorage.getItem("muted");
-			if (ret !== "true" && ret !== "false") {
+			let mute_ret = sessionStorage.getItem("muted");
+			if (mute_ret !== "true" && mute_ret !== "false") {
 				sessionStorage.setItem("muted", "false");
 			}
+
 
 			let awake = false;
 			function wakeUp() {
@@ -449,17 +457,23 @@
 				wakeUp();
 			});
 
-			// Set up default colors
-			if (window.matchMedia) {
-				let is_dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-				window.wasm.set_color_mode(is_dark);
+			let color_ret = sessionStorage.getItem("colormode");
+			if (color_ret === "") {
+				sessionStorage.setItem("colormode", "auto");
+			}
 
-				window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+			window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+				let color_ret = sessionStorage.getItem("colormode");
+				if (color_ret === "auto") {
 					let is_dark = event.matches;
-					window.wasm.set_color_mode(is_dark);
-				})
+					window.wasm.set_color_mode(true, is_dark);
+				}
+			})
+
+			if (color_ret === "auto") {
+				window.wasm.set_color_mode(true, get_system_colormode())
 			} else {
-				window.wasm.set_color_mode(false);
+				window.wasm.set_color_mode(false, color_ret === "dark")
 			}
 
 			window.wasm.load_build_hash(window.wasm.blob_hash);
