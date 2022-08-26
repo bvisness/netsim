@@ -777,7 +777,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		case .Logs:
 			logs_left: f32 = menu_offset
 			logs_height: f32 = 600
-			logs_width: f32 = 560
+			logs_width: f32 = tab_width - pad_size
 
 			draw_text("Connections:", Vec2{logs_left, next_line(&y)}, 1.125, default_font, text_color); y += 1
 			if len(inspect_node.tcp_sessions) > 0 {
