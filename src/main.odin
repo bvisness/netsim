@@ -124,7 +124,7 @@ set_color_mode :: proc "contextless" (auto: bool, is_dark: bool) {
 		text_color2   = Vec3{180, 180, 180}
 		text_color3   = Vec3{180, 180, 180}
 		button_color  = Vec3{40,   40,  40}
-		button_color  = Vec3{40,   40,  40}
+		button_color2 = Vec3{20,   20,  20}
 		line_color    = Vec3{100, 100, 100}
 		outline_color = Vec3{80,   80,  80}
 		node_color    = Vec3{140, 140, 140}
@@ -1187,7 +1187,7 @@ tab :: proc(in_rect: Rect, text: string, font: string, selected: bool) -> bool {
 		draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color3)
 	} else {
 		draw_rect(in_rect, 0, button_color2)
-		draw_rect_outline(in_rect, 1, button_color)
+		draw_rect_outline(in_rect, 1, button_color2)
 		draw_text(text, Vec2{in_rect.pos.x + in_rect.size.x/2 - text_width/2, in_rect.pos.y + (in_rect.size.y / 2) - (text_height / 2)}, 1, font, text_color)
 	}
 
