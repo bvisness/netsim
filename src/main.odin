@@ -460,6 +460,12 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	defer free_all(context.temp_allocator)
 	defer frame_count += 1
 
+	// generate menu width
+	tab_width : f32 = 600
+	menu_offset := max(300, width - tab_width - pad_size)
+	graph_width := menu_offset
+	graph_height := height - toolbar_height
+
 	// This is nasty code that allows me to do load-time things once the wasm context is init
 	if first_frame {
 		random_seed = u64(get_time())
@@ -468,7 +474,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		rand.set_global_seed(random_seed)
 		get_session_storage("muted")
 
-		pan = Vec2{pad_size, (max_height / 2) + pad_size}
+		pan = Vec2{(graph_width / 2) - (max_width / 2), (graph_height / 2) - (max_height / 2)}
 		first_frame = false
 	}
 
@@ -481,10 +487,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     t += dt
 
 	// compute graph scale
-
 	MIN_SCALE :: 0.1
 	MAX_SCALE :: 2.5
-	if pt_in_rect(mouse_pos, rect(0, toolbar_height, max_width, height)) {
+	if pt_in_rect(mouse_pos, rect(0, toolbar_height, graph_width, height - toolbar_height)) {
 		scale *= 1 + (0.05 * scroll_velocity * dt)
 		if scale < MIN_SCALE {
 			scale = MIN_SCALE
@@ -496,7 +501,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 	// compute pan
 	pan_delta := Vec2{}
 	if is_mouse_down {
-		if pt_in_rect(clicked_pos, rect(0, toolbar_height, max_width, height)) {
+		if pt_in_rect(clicked_pos, rect(0, toolbar_height, graph_width, height - toolbar_height)) {
 			pan_delta = mouse_pos - last_mouse_pos
 		}
 		last_mouse_pos = mouse_pos
@@ -518,10 +523,9 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 		tick()
 	}
 
-
     canvas_clear()
-    draw_rect(rect(max_width + pad_size, 0, width, height), 0, bg_color)
-    draw_rect(rect(0, toolbar_height, max_width + pad_size, height), 0, bg_color2)
+    draw_rect(rect(graph_width, 0, width, height), 0, bg_color)
+    draw_rect(rect(0, toolbar_height, menu_offset, height), 0, bg_color2)
 
 	// Render graph view
 
@@ -605,18 +609,16 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
     draw_rect(rect(0, 0, width, toolbar_height), 0, toolbar_color)
 
 	// Render menu view
-    draw_rect(rect(max_width + pad_size, toolbar_height, width, height), 0, bg_color)
+    draw_rect(rect(menu_offset, toolbar_height, tab_width, height), 0, bg_color)
 
 	// draw menu border
-	draw_line(Vec2{max_width + pad_size, toolbar_height}, Vec2{max_width + pad_size, height}, 2, line_color)
+	draw_line(Vec2{menu_offset, toolbar_height}, Vec2{menu_offset, height}, 2, line_color)
 
-	menu_offset := max_width + (pad_size * 2)
-
+	menu_offset += pad_size
 
 	if node_selected != -1 {
 		inspect_node := &nodes[node_selected]
 
-		tab_width : f32 = 600
 
 		y: f32 = 0
 		next_line := proc(y: ^f32) -> f32 {
@@ -642,7 +644,7 @@ frame :: proc "contextless" (width, height: f32, dt: f32) -> bool {
 
 			tab_offset += text_width + (tab_pad * 2)
 		}
-		draw_line(Vec2{max_width + pad_size, y + text_height + (tab_pad * 2)}, Vec2{menu_offset + tab_width, y + text_height + (tab_pad * 2)}, 2, line_color)
+		draw_line(Vec2{menu_offset - pad_size, y + text_height + (tab_pad * 2)}, Vec2{menu_offset + tab_width, y + text_height + (tab_pad * 2)}, 2, line_color)
 		y += text_height + (tab_pad * 2)
 		next_line(&y)
 
